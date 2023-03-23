@@ -24,7 +24,7 @@ const Faq = () => {
       </h1>
 
       <h2>
-        What does this do?
+        What does <a href="https://nabu.run">nabu.run</a> do?
       </h2>
       <p>
         Right now, it serves "NABU Network 1984 Cycle v2" to a NABU connected
@@ -80,18 +80,19 @@ const Faq = () => {
       </p>
 
       <h2>
-        Is this open source? Where's the code?
+        Is this open source? Can I run my own copy?
       </h2>
       <p>
-        I fully intend for this to be open source. I need a little more time to
-        clean it up, make sure all the licenses are right where I'm relying on
-        other people's code, and publish it on GitHub.
+        <a href="https://github.com/masto/nabu.run">https://github.com/masto/nabu.run</a>.
+        If you want to run it on your computer or host another copy somewhere,
+        you can do so, with or without a hex editor. My intention was to make it easy
+        for people to get started by not having to do any of that.
       </p>
 
       <p class={style.small} style="text-align: right">
         Made by <a href="https://masto.me">@masto</a>
       </p>
-    </div>
+    </div >
   );
 };
 

@@ -39,7 +39,9 @@ const Home = () => {
 			{current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
 
 			<p class={style.small}>
-				<a href="https://youtu.be/PoQDRdr75cA">Demo video</a>, <a href="/faq">FAQ</a>
+				<a href="https://youtu.be/PoQDRdr75cA">Demo video</a>
+				, <a href="/faq">FAQ</a>
+				, <a href="https://github.com/masto/nabu.run">Code</a>
 			</p>
 
 			<p class={style.small} style="text-align: right">
