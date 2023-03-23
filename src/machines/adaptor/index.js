@@ -172,7 +172,7 @@ const machine = createMachine({
       action(ctx => {
         console.log("found a port, skipping request", ctx.foundPorts);
         // Just assume the first one in the list. It'd be unusual to choose
-        // multiple ports, but if this is the wrongone , the user will
+        // multiple ports, but if this is the wrong one, the user will
         // probably close it and we can try again.
         ctx.port = ctx.foundPorts[0];
       })
