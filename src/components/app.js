@@ -20,12 +20,15 @@ import Home from '../routes/home';
 import Faq from '../routes/home/faq';
 
 const App = () => {
-	let baseUrl = '/';
+	let baseUrl = '', imageDir = '', imageName;
 	try { baseUrl = process.env.PREACT_APP_BASE_URL } catch { };
+	try { imageDir = process.env.PREACT_APP_IMAGE_DIR } catch { };
+	try { imageName = process.env.PREACT_APP_IMAGE_NAME } catch { };
+
 	let adaptor = useMachine(adaptorMachine, {
 		// Use of `navigator` breaks pre-rendering, so wrap it in a guard
 		serial: typeof window !== "undefined" ? navigator?.serial : undefined,
-		baseUrl
+		baseUrl, imageDir, imageName
 	});
 
 	return (

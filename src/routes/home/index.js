@@ -68,7 +68,7 @@ function AdaptorState(props) {
 	const state = current.name;
 	const port = current.context?.port;
 	const progress = current.context?.progress;
-	const pakId = current.context?.image?.pakId;
+	const fileId = current.context?.image?.fileId;
 
 	const portStatus = port ? (() => {
 		const i = port.getInfo();
@@ -80,7 +80,7 @@ function AdaptorState(props) {
 		<p>
 			<div>Adaptor state: {state}</div>
 			<div>Port: {portStatus}</div>
-			{pakId ? <div>Requested PAK: {pakId}</div> : ""}
+			{fileId ? <div>Loading {fileId}</div> : ""}
 			{progress ? <ProgressIndicator complete={progress.complete} total={progress.total} /> : ""}
 		</p>
 	);
