@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useContext } from 'preact/hooks';
+import { useContext, useState } from 'preact/hooks';
 import AdaptorContext from '../../components/adaptor-context';
 import style from './style.css';
 
@@ -36,7 +36,10 @@ const Home = () => {
 
 			<AdaptorState current={current} />
 
-			{current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
+			<p>
+				{current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
+				<ChannelSelector current={current} send={send} />
+			</p>
 
 			<p class={style.small}>
 				<a href="https://youtu.be/PoQDRdr75cA">Demo video</a>
@@ -95,7 +98,63 @@ function SerialButton(props) {
 	const title = isWaiting ? 'Select Port' : 'Close Port';
 	const onClick = isWaiting ? () => send('request') : () => port.forget();
 
-	return <p><button class={style.port} onClick={onClick}>{title}</button></p >;
+	return <button class={style.port} onClick={onClick}>{title}</button>;
+}
+
+const Select = ({ label, value, options, onChange }) => {
+	return (
+		<label>
+			{label}
+			<select value={value} onChange={onChange}>
+				{options.map((option) => (
+					<option value={option.value}>{option.label}</option>
+				))}
+			</select>
+		</label>
+	);
+};
+
+function ChannelSelector(props) {
+	const { current, send } = props;
+
+	const options = [
+		{
+			label: 'NABU Network 1984 Cycle v1', value: 'cycle 1 raw',
+			channel: { imageDir: 'cycle%25201%2520raw', imageName: null }
+		},
+		{
+			label: 'NABU Network 1984 Cycle v2', value: 'cycle 2 raw',
+			channel: { imageDir: 'cycle%25202%2520raw', imageName: null }
+		},
+		{
+			label: 'DJs Playground Cycle', value: 'cycle DJ raw',
+			channel: { imageDir: 'cycle%2520DJ%2520raw', imageName: null }
+		},
+		{
+			label: 'Pac Man', value: 'pac-man.nabu',
+			channel: { imageDir: 'HomeBrew/titles', imageName: 'pac-man.nabu' }
+		},
+	];
+
+	const [value, setValue] = useState('cycle 2 raw');
+
+	const selectChannel = event => {
+		setValue(event.target.value);
+		const channel = options.find(v => v.value === event.target.value).channel;
+		// It's kind of hacky to reach into this thing we don't own, but this
+		// is just a proof of concept for now.
+		Object.assign(current.context, channel);
+	};
+
+	return (
+		<span class={style.channel}>
+			<Select
+				label='Channel:'
+				options={options}
+				value={value}
+				onChange={selectChannel} />
+		</span>
+	)
 }
 
 export default Home;

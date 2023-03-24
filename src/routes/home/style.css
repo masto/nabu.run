@@ -25,6 +25,22 @@
   font-size: 75%;
 }
 
+.channel {
+  margin-left: 20px;
+}
+
+.channel label {
+  font-size: 14pt;
+}
+
+.channel select {
+  border: 1px solid var(--nabu-gray);
+  border-radius: 0.25em;
+  padding: 0.1em 0.5em;
+  color: var(--nabu-white);
+  background-color: var(--nabu-light-blue);
+}
+
 @media (max-width: 639px) {
   .home section {
     margin-top: 5rem;
