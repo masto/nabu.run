@@ -89,9 +89,10 @@ function AdaptorState(props) {
 function SerialButton() {
 	const [current, send] = useContext(AdaptorContext);
 	const port = current.context?.port;
+	const isWaiting = current.name === 'waitingForPort';
 
-	const title = !port ? 'Select Port' : 'Close Port';
-	const onClick = !port ? () => send('request') : () => port.forget();
+	const title = isWaiting ? 'Select Port' : 'Close Port';
+	const onClick = isWaiting ? () => send('request') : () => port.forget();
 
 	return <p><button class={style.port} onClick={onClick}>{title}</button></p >;
 }
