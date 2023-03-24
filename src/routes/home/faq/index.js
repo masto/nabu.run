@@ -71,8 +71,8 @@ const Faq = () => {
       <p>
         I have no interest in repackaging this in, e.g, Electron. But what you can
         do is click the install button in Chrome to save it as an application.
-        I have not yet put any effort into testing to make this is set up correctly,
-        but it seems to work.
+        I have not yet put any effort into testing to make sure this is set up
+        correctly, but it seems to work.
       </p>
       <p>
         At some point, I intend to pull the code out of here into a library that
