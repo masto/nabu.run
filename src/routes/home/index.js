@@ -86,8 +86,9 @@ function AdaptorState(props) {
 	);
 }
 
-function SerialButton() {
-	const [current, send] = useContext(AdaptorContext);
+function SerialButton(props) {
+	const { current, send } = props;
+
 	const port = current.context?.port;
 	const isWaiting = current.name === 'waitingForPort';
 
