@@ -17,4 +17,4 @@
 
 import { createContext } from 'preact';
 
-export const AdaptorContext = createContext();
+export const ConfigContext = createContext();

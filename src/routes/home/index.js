@@ -11,7 +11,8 @@
 // limitations under the License.
 
 import { useContext, useState } from 'preact/hooks';
-import AdaptorContext from '../../components/adaptor-context';
+import { AdaptorContext } from '../../components/adaptor-context';
+import { ConfigContext } from '../../components/config-context';
 import style from './style.css';
 
 import 'robot3/debug';
@@ -19,7 +20,18 @@ import 'robot3/debug';
 const hex = (d, l = 2) => '0x' + Number(d).toString(16).padStart(l, '0');
 
 const Home = () => {
-	const [current, send] = useContext(AdaptorContext);
+	const [config, setConfig] = useContext(ConfigContext);
+	const adaptor = useContext(AdaptorContext);
+	const [current, send] = adaptor;
+
+	const setChannel = event => {
+		setConfig({
+			...config,
+			channel: {
+				...config.channel, ...event.target.value
+			}
+		});
+	};
 
 	return (
 		<div class={style.home}>
@@ -38,7 +50,7 @@ const Home = () => {
 
 			<p>
 				{current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
-				<ChannelSelector current={current} send={send} />
+				<ChannelSelector channel={config.channel} onChange={setChannel} />
 			</p>
 
 			<p class={style.small}>
@@ -66,12 +78,11 @@ function ProgressIndicator(props) {
 }
 
 function AdaptorState(props) {
-	const { current } = props;
+	const { current, onChange } = props;
 
 	const state = current.name;
 	const port = current.context?.port;
 	const progress = current.context?.progress;
-	const fileId = current.context?.image?.fileId;
 
 	const portStatus = port ? (() => {
 		const i = port.getInfo();
@@ -83,7 +94,7 @@ function AdaptorState(props) {
 		<p>
 			<div>Adaptor state: {state}</div>
 			<div>Port: {portStatus}</div>
-			{fileId ? <div>Loading {fileId}</div> : ""}
+			{progress ? <div>Loading {progress.fileName}</div> : ""}
 			{progress ? <ProgressIndicator complete={progress.complete} total={progress.total} /> : ""}
 		</p>
 	);
@@ -115,7 +126,7 @@ const Select = ({ label, value, options, onChange }) => {
 };
 
 function ChannelSelector(props) {
-	const { current, send } = props;
+	const { channel, onChange } = props;
 
 	const options = [
 		{
@@ -131,8 +142,16 @@ function ChannelSelector(props) {
 			channel: { imageDir: 'cycle%2520DJ%2520raw', imageName: null }
 		},
 		{
-			label: 'Pac Man', value: 'pac-man.nabu',
+			label: 'Pac-Man', value: 'pac-man.nabu',
 			channel: { imageDir: 'HomeBrew/titles', imageName: 'pac-man.nabu' }
+		},
+		{
+			label: 'Snake', value: 'snake',
+			channel: { imageDir: 'HomeBrew/titles', imageName: 'snake.nabu' }
+		},
+		{
+			label: 'Tetris', value: 'tetris',
+			channel: { imageDir: 'HomeBrew/titles', imageName: 'tetris.nabu' }
 		},
 	];
 
@@ -140,10 +159,8 @@ function ChannelSelector(props) {
 
 	const selectChannel = event => {
 		setValue(event.target.value);
-		const channel = options.find(v => v.value === event.target.value).channel;
-		// It's kind of hacky to reach into this thing we don't own, but this
-		// is just a proof of concept for now.
-		Object.assign(current.context, channel);
+		const newChannel = options.find(v => v.value === event.target.value).channel;
+		onChange({ target: { value: newChannel } });
 	};
 
 	return (

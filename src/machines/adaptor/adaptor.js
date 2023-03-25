@@ -306,17 +306,14 @@ const machine = createMachine({
       let segment = bytes[0];
       let imageId = bytes[3] << 16 | bytes[2] << 8 | bytes[1];
 
-      // We retain the last image since multiple segments will be requested
-      if (ctx?.image?.imageId !== imageId) {
-        console.log('preparing new image');
-        ctx.image = { imageId: imageId };
-      }
-      ctx.image.segment = segment;
-      console.log(`segment ${hex(segment)} image ${hex(imageId, 6)}`);
+      ctx.image = { imageId, segment }
     }),
     // We don't handle the clock yet, let the other IAs have some value :-)
-    transition('done', 'sendPacketUnauthorized', guard(ctx => ctx.image.imageId === NABU.IMAGE_TIME)),
-    transition('done', 'preparePacket'),
+    transition('done', 'sendPacketUnauthorized',
+      guard(ctx => ctx.image.imageId === NABU.IMAGE_TIME),
+      action(() => console.log("rejecting time request"))
+    ),
+    transition('done', 'loadImageData'),
     resetOnError
   ),
 
@@ -324,82 +321,99 @@ const machine = createMachine({
   sendPacketUnauthorized: sendBytes([NABU.STATE_CONFIRMED, NABU.SERVICE_UNAUTHORIZED], 'awaitUnauthAck'),
   awaitUnauthAck: expectToReceive([NABU.MSGSEQ_ACK], 'idle'),
 
-  // The meat of the thing is serving a segment of the requested file
-  preparePacket: invoke(ctx => {
-    // First, download the file from the cloud, if necessary
-    return new Promise((resolve, reject) => {
-      // Check to see if it has already been downloaded and stuffed in ctx
-      if (ctx.image.data) return resolve(ctx.image.data);
-
-      // We don't have the data, so get it from the Internet. Browsers are
-      // good at this.
-      console.log('Fetching image remotely');
-      const pakId = ctx.image.imageId.toString(16).padStart(6, '0');
+  loadImageData: invoke(async ctx => {
+    const makeImageUrl = (imageId, channel) => {
+      const pakId = imageId.toString(16).padStart(6, '0');
       // If a file name is set, override the pak file
-      const fileId = ctx?.imageName ?? `${pakId}.pak`;
-      ctx.image.fileId = fileId;
-      const url = `${ctx.baseUrl}${ctx.imageDir}/${fileId}`;
+      const fileId = channel.imageName ?? `${pakId}.pak`;
+      const url = `${channel.baseUrl}${channel.imageDir}/${fileId}`;
+      return { url, fileId };
+    };
 
-      // It's getting time
-      resolve(
-        fetch(url).then(response => {
-          // This can go one of two ways
-          if (response.ok) {
-            return response.arrayBuffer();
-          }
-          else {
-            throw new Error(`failed to fetch ${ctx.image.fileId}: ${response.status}`);
-          }
-        })
-      );
-    }).then(data => {
-      // At this point, we have the data, so we just need to slice and serve.
-      ctx.image.data = data;
-      const dataSize = data.byteLength;
-      delete ctx.progress;
+    const { url, fileId } = makeImageUrl(ctx.image.imageId, ctx.getChannel());
 
-      const segment = ctx.image.segment;
+    // We retain the last image since multiple segments will be requested
+    if (ctx?.image?.url !== url) {
+      console.log('preparing new image');
+      ctx.image = { ...ctx.image, url, fileId };
+    }
 
-      // pak files are pre-packetized, but for the sake of simplicity
-      // of handling both paks and raw files, we'll just extract the data
-      // from the pak and regenerate the header and CRC. Sorry for
-      // wasting electricity.
-      let len = NABU.MAXPAYLOADSIZE;
-      let offset = segment * NABU.MAXPAYLOADSIZE;
-      if (!ctx?.imageName) {
-        // for pak, skip over headers
-        offset += NABU.HEADERSIZE + NABU.FOOTERSIZE +
-          segment * (NABU.HEADERSIZE + NABU.FOOTERSIZE + 2);
-      }
-      let isLast = false;
-
-      if (offset >= dataSize) {
-        throw new Error(`offset ${offset} exceeds size ${dataSize}`);
-      }
-
-      // Cap the final packet to the remaining bytes
-      if (offset + len >= dataSize) {
-        len = dataSize - offset;
-        isLast = true;
-      }
-
-      ctx.progress = { total: dataSize, complete: offset + len };
-
-      let packetLen = len + NABU.HEADERSIZE;
-      let buf = new Uint8Array(packetLen + NABU.FOOTERSIZE);
-      setHeader(buf.subarray(0, 16), ctx.image.imageId, segment, offset, isLast);
-
-      // Copy data
-      buf.set(new Uint8Array(data, offset, len), 16);
-
-      // Calculate CRC
-      let crc = crc16ccitt(buf.subarray(0, packetLen)) ^ 0xffff;
-      new DataView(buf.buffer).setUint16(packetLen, crc);
-
-      ctx.image.buf = buf;
-    })
-      .catch(error => { console.log(error); throw error; })
+    console.log(`segment ${hex(ctx.image.segment)} image ${hex(ctx.image.imageId, 6)}`);
   },
+    transition('done', 'preparePacket'),
+    resetOnError
+  ),
+
+  // The meat of the thing is serving a segment of the requested file
+  preparePacket: invoke(ctx => new Promise((resolve, reject) => {
+    // First, download the file from the cloud, if necessary
+    // Check to see if it has already been downloaded and stuffed in ctx
+    if (ctx.image.data) return resolve(ctx.image.data);
+
+    // We don't have the data, so get it from the Internet. Browsers are
+    // good at this.
+    console.log('Fetching image remotely');
+
+    // It's getting time
+    resolve(
+      fetch(ctx.image.url).then(response => {
+        // This can go one of two ways
+        if (response.ok) {
+          return response.arrayBuffer();
+        }
+        else {
+          throw new Error(`failed to fetch ${ctx.image.fileId}: ${response.status}`);
+        }
+      })
+    );
+  }).then(data => {
+    // At this point, we have the data, so we just need to slice and serve.
+    ctx.image.data = data;
+    const dataSize = data.byteLength;
+    delete ctx.progress;
+
+    const segment = ctx.image.segment;
+
+    // pak files are pre-packetized, but for the sake of simplicity
+    // of handling both paks and raw files, we'll just extract the data
+    // from the pak and regenerate the header and CRC. Sorry for
+    // wasting electricity.
+    let len = NABU.MAXPAYLOADSIZE;
+    let offset = segment * NABU.MAXPAYLOADSIZE;
+    if (!ctx.getChannel().imageName) {
+      // for pak, skip over headers
+      offset += NABU.HEADERSIZE + NABU.FOOTERSIZE +
+        segment * (NABU.HEADERSIZE + NABU.FOOTERSIZE + 2);
+    }
+    let isLast = false;
+
+    if (offset >= dataSize) {
+      throw new Error(`offset ${offset} exceeds size ${dataSize}`);
+    }
+
+    // Cap the final packet to the remaining bytes
+    if (offset + len >= dataSize) {
+      len = dataSize - offset;
+      isLast = true;
+    }
+
+    ctx.progress = {
+      fileName: ctx.image.fileId, total: dataSize, complete: offset + len
+    };
+
+    let packetLen = len + NABU.HEADERSIZE;
+    let buf = new Uint8Array(packetLen + NABU.FOOTERSIZE);
+    setHeader(buf.subarray(0, 16), ctx.image.imageId, segment, offset, isLast);
+
+    // Copy data
+    buf.set(new Uint8Array(data, offset, len), 16);
+
+    // Calculate CRC
+    let crc = crc16ccitt(buf.subarray(0, packetLen)) ^ 0xffff;
+    new DataView(buf.buffer).setUint16(packetLen, crc);
+
+    ctx.image.buf = buf;
+  }).catch(error => { console.log(error); throw error; }),
     transition('done', 'sendPacketAuthorized'),
     transition('error', 'sendPacketUnauthorized')),
 
@@ -412,6 +426,6 @@ const machine = createMachine({
     resetOnError
   )
 },
-  initialContext => ({ baud: 111816, imageDir: "", ...initialContext }));
+  initialContext => ({ baud: 111816, ...initialContext }));
 
 export default machine;
