@@ -84,9 +84,9 @@ const Faq = () => {
       </h2>
       <p>
         <a href="https://github.com/masto/nabu.run">https://github.com/masto/nabu.run</a>.
-        If you want to run it on your computer or host another copy somewhere,
-        you can do so, with or without a hex editor. My intention was to make it easy
-        for people to get started by not having to do any of that.
+        I made this for fun, not to carve out ownership of something. Feel
+        free to use it in whatever ways make you happy. If you have fixes
+        and improvements, I welcome pull requests.
       </p>
 
       <p class={style.small} style="text-align: right">
