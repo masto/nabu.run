@@ -66,10 +66,10 @@ const bufferUntil = async (ctx, matchFn) => {
 };
 
 // Now build on the above to hold out for a specified number of bytes.
-const getBytes = (ctx, count) => new Promise(async r => {
+const getBytes = async (ctx, count) => {
   await bufferUntil(ctx, ctx => ctx.readBuffer.length >= count);
-  r(ctx.readBuffer.splice(0, count), ctx);
-});
+  return ctx.readBuffer.splice(0, count);
+};
 
 // Another layer on top: get some bytes and do a callback on them.
 const processBytes = (count, cb, nextState) => invoke(
