@@ -174,7 +174,7 @@ const machine = createMachine({
   error: state(immediate(
     'stopped',
     action(ctx => {
-      console.log("fatal error: ", ctx.error);
+      console.log('fatal error: ', ctx.error);
     })
   )),
 
@@ -194,7 +194,7 @@ const machine = createMachine({
     immediate('openingPort',
       guard(ctx => ctx.foundPorts?.length),
       action(ctx => {
-        console.log("found a port, skipping request", ctx.foundPorts);
+        console.log('found a port, skipping request', ctx.foundPorts);
         // Just assume the first one in the list. It'd be unusual to choose
         // multiple ports, but if this is the wrong one, the user will
         // probably close it and we can try again.
@@ -261,7 +261,7 @@ const machine = createMachine({
   // in order to start over again.
   reset: state(
     immediate('startConnection', action(ctx => {
-      console.log("RESET");
+      console.log('RESET');
       // Need to release these or we won't be able to grab them again.
       ctx.reader?.releaseLock();
       ctx.writer?.releaseLock();
@@ -308,7 +308,7 @@ const machine = createMachine({
 
       // We retain the last image since multiple segments will be requested
       if (ctx?.image?.imageId !== imageId) {
-        console.log("preparing new image");
+        console.log('preparing new image');
         ctx.image = { imageId: imageId };
       }
       ctx.image.segment = segment;
@@ -333,7 +333,7 @@ const machine = createMachine({
 
       // We don't have the data, so get it from the Internet. Browsers are
       // good at this.
-      console.log("Fetching image remotely");
+      console.log('Fetching image remotely');
       const pakId = ctx.image.imageId.toString(16).padStart(6, '0');
       // If a file name is set, override the pak file
       const fileId = ctx?.imageName ?? `${pakId}.pak`;

@@ -27,7 +27,7 @@ const App = () => {
 
 	let adaptor = useMachine(adaptorMachine, {
 		// Use of `navigator` breaks pre-rendering, so wrap it in a guard
-		serial: typeof window !== "undefined" ? navigator?.serial : undefined,
+		serial: typeof window !== 'undefined' ? navigator?.serial : undefined,
 		baseUrl, imageDir, imageName
 	});
 
