@@ -306,7 +306,7 @@ const machine = createMachine({
       let segment = bytes[0];
       let imageId = bytes[3] << 16 | bytes[2] << 8 | bytes[1];
 
-      ctx.image = { imageId, segment }
+      ctx.image = { ...ctx.image, imageId, segment }
     }),
     // We don't handle the clock yet, let the other IAs have some value :-)
     transition('done', 'sendPacketUnauthorized',
@@ -335,7 +335,9 @@ const machine = createMachine({
     // We retain the last image since multiple segments will be requested
     if (ctx?.image?.url !== url) {
       console.log('preparing new image');
-      ctx.image = { ...ctx.image, url, fileId };
+      ctx.image = {
+        url, fileId, imageId: ctx.image.imageId, segment: ctx.image.segment
+      };
     }
 
     console.log(`segment ${hex(ctx.image.segment)} image ${hex(ctx.image.imageId, 6)}`);
