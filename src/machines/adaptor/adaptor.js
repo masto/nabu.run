@@ -399,7 +399,7 @@ const machine = createMachine({
       .catch(error => { console.log(error); throw error; })
   },
     transition('done', 'sendPacketAuthorized'),
-    transition('error', 'sendFinished')),
+    transition('error', 'sendPacketUnauthorized')),
 
   // This is the happy path.
   sendPacketAuthorized: sendBytes([NABU.STATE_CONFIRMED, NABU.SERVICE_AUTHORIZED], 'awaitPacketAck'),
