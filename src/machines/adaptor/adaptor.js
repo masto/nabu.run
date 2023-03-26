@@ -327,7 +327,7 @@ const machine = createMachine({
   // The meat of the thing is serving a segment of the requested file
   preparePacket: invoke(ctx => {
     // First, download the file from the cloud, if necessary
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       // Check to see if it has already been downloaded and stuffed in ctx
       if (ctx.image.data) return resolve(ctx.image.data);
 
@@ -341,61 +341,63 @@ const machine = createMachine({
       const url = `${ctx.baseUrl}${ctx.imageDir}/${fileId}`;
 
       // It's getting time
-      const response = await fetch(url);
-      // This can go one of two ways
-      if (response.ok) {
-        resolve(response.arrayBuffer());
+      resolve(
+        fetch(url).then(response => {
+          // This can go one of two ways
+          if (response.ok) {
+            return response.arrayBuffer();
+          }
+          else {
+            throw new Error(`failed to fetch ${ctx.image.fileId}: ${response.status}`);
+          }
+        })
+      );
+    }).then(data => {
+      // At this point, we have the data, so we just need to slice and serve.
+      ctx.image.data = data;
+      const dataSize = data.byteLength;
+      delete ctx.progress;
+
+      const segment = ctx.image.segment;
+
+      // pak files are pre-packetized, but for the sake of simplicity
+      // of handling both paks and raw files, we'll just extract the data
+      // from the pak and regenerate the header and CRC. Sorry for
+      // wasting electricity.
+      let len = NABU.MAXPAYLOADSIZE;
+      let offset = segment * NABU.MAXPAYLOADSIZE;
+      if (!ctx?.imageName) {
+        // for pak, skip over headers
+        offset += NABU.HEADERSIZE + NABU.FOOTERSIZE +
+          segment * (NABU.HEADERSIZE + NABU.FOOTERSIZE + 2);
       }
-      else {
-        reject(`failed to fetch ${fileId}: ${response.status}`);
+      let isLast = false;
+
+      if (offset >= dataSize) {
+        throw new Error(`offset ${offset} exceeds size ${dataSize}`);
       }
+
+      // Cap the final packet to the remaining bytes
+      if (offset + len >= dataSize) {
+        len = dataSize - offset;
+        isLast = true;
+      }
+
+      ctx.progress = { total: dataSize, complete: offset + len };
+
+      let packetLen = len + NABU.HEADERSIZE;
+      let buf = new Uint8Array(packetLen + NABU.FOOTERSIZE);
+      setHeader(buf.subarray(0, 16), ctx.image.imageId, segment, offset, isLast);
+
+      // Copy data
+      buf.set(new Uint8Array(data, offset, len), 16);
+
+      // Calculate CRC
+      let crc = crc16ccitt(buf.subarray(0, packetLen)) ^ 0xffff;
+      new DataView(buf.buffer).setUint16(packetLen, crc);
+
+      ctx.image.buf = buf;
     })
-      .then(data => {
-        // At this point, we have the data, so we just need to slice and serve.
-        ctx.image.data = data;
-        const dataSize = data.byteLength;
-        delete ctx.progress;
-
-        const segment = ctx.image.segment;
-
-        // pak files are pre-packetized, but for the sake of simplicity
-        // of handling both paks and raw files, we'll just extract the data
-        // from the pak and regenerate the header and CRC. Sorry for
-        // wasting electricity.
-        let len = NABU.MAXPAYLOADSIZE;
-        let offset = segment * NABU.MAXPAYLOADSIZE;
-        if (!ctx?.imageName) {
-          // for pak, skip over headers
-          offset += NABU.HEADERSIZE + NABU.FOOTERSIZE +
-            segment * (NABU.HEADERSIZE + NABU.FOOTERSIZE + 2);
-        }
-        let isLast = false;
-
-        if (offset >= dataSize) {
-          throw new Error(`offset ${offset} exceeds size ${dataSize}`);
-        }
-
-        // Cap the final packet to the remaining bytes
-        if (offset + len >= dataSize) {
-          len = dataSize - offset;
-          isLast = true;
-        }
-
-        ctx.progress = { total: dataSize, complete: offset + len };
-
-        let packetLen = len + NABU.HEADERSIZE;
-        let buf = new Uint8Array(packetLen + NABU.FOOTERSIZE);
-        setHeader(buf.subarray(0, 16), ctx.image.imageId, segment, offset, isLast);
-
-        // Copy data
-        buf.set(new Uint8Array(data, offset, len), 16);
-
-        // Calculate CRC
-        let crc = crc16ccitt(buf.subarray(0, packetLen)) ^ 0xffff;
-        new DataView(buf.buffer).setUint16(packetLen, crc);
-
-        ctx.image.buf = buf;
-      })
       .catch(error => { console.log(error); throw error; })
   },
     transition('done', 'sendPacketAuthorized'),
