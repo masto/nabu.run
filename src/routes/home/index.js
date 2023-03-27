@@ -15,8 +15,6 @@ import { AdaptorContext } from '../../components/adaptor-context';
 import { ConfigContext } from '../../components/config-context';
 import style from './style.css';
 
-import 'robot3/debug';
-
 const hex = (d, l = 2) => '0x' + Number(d).toString(16).padStart(l, '0');
 
 const Home = () => {
