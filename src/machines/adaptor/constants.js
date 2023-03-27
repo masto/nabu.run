@@ -88,3 +88,12 @@ export const MSGSEQ_ACK = [MSG_ESCAPE, STATUS_GOOD];
 export const MSGSEQ_FINISHED = [MSG_ESCAPE, STATE_DONE];
 
 export const IMAGE_TIME = 0x007fffff;
+
+// RetroNet
+
+export const MSG_RN_FILE_SIZE = 0xa8;
+export const MSG_RN_FILE_OPEN = 0xa3;
+export const MSG_RN_FH_DETAILS = 0xb4;
+export const MSG_RN_FH_READSEQ = 0xb5;
+export const MSG_RN_FH_READ = 0xa5;
+export const MSG_RN_FH_CLOSE = 0xa7;
