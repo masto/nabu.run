@@ -26,7 +26,7 @@ const initConfig = () => {
 		baseUrl = '',
 		imageDir = '',
 		imageName = null,
-		channelsUrl = 'channels.json';
+		channelsUrl = '/channels.json';
 	try { baseUrl = process.env.PREACT_APP_BASE_URL } catch { };
 	try { imageDir = process.env.PREACT_APP_IMAGE_DIR } catch { };
 	try { imageName = process.env.PREACT_APP_IMAGE_NAME } catch { };
