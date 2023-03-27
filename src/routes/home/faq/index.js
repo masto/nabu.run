@@ -16,7 +16,7 @@ const Faq = () => {
   return (
     <div class={style.faq}>
       <h1>
-        <a href="./">Back to Home</a>
+        <a href="/">Back to Home</a>
       </h1>
 
       <h1>
