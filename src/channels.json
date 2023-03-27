@@ -1,0 +1,58 @@
+[
+  {
+    "label": "NABU Network 1984 Cycle v1",
+    "value": "cycle 1 raw",
+    "channel": {
+      "imageDir": "cycle%25201%2520raw",
+      "imageName": null
+    }
+  },
+  {
+    "label": "NABU Network 1984 Cycle v2",
+    "value": "cycle 2 raw",
+    "channel": {
+      "imageDir": "cycle%25202%2520raw",
+      "imageName": null
+    }
+  },
+  {
+    "label": "DJs Playground Cycle",
+    "value": "cycle DJ raw",
+    "channel": {
+      "imageDir": "cycle%2520DJ%2520raw",
+      "imageName": null
+    }
+  },
+  {
+    "label": "Pac-Man",
+    "value": "pac-man.nabu",
+    "channel": {
+      "imageDir": "HomeBrew/titles",
+      "imageName": "pac-man.nabu"
+    }
+  },
+  {
+    "label": "Snake",
+    "value": "snake",
+    "channel": {
+      "imageDir": "HomeBrew/titles",
+      "imageName": "snake.nabu"
+    }
+  },
+  {
+    "label": "Tetris",
+    "value": "tetris",
+    "channel": {
+      "imageDir": "HomeBrew/titles",
+      "imageName": "tetris.nabu"
+    }
+  },
+  {
+    "label": "Mandelbrot",
+    "value": "mandelbrot",
+    "channel": {
+      "imageDir": "HomeBrew/titles",
+      "imageName": "Mandelbrot.nabu"
+    }
+  }
+]

@@ -17,6 +17,7 @@ import style from './style.css';
 
 const hex = (d, l = 2) => '0x' + Number(d).toString(16).padStart(l, '0');
 
+
 const Home = () => {
 	const [config, setConfig] = useContext(ConfigContext);
 	const adaptor = useContext(AdaptorContext);
@@ -48,7 +49,10 @@ const Home = () => {
 
 			<p>
 				{current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
-				<ChannelSelector channel={config.channel} onChange={setChannel} />
+				{config.channelList ?
+					<ChannelSelector
+						channel={config.channel} channelList={config.channelList} onChange={setChannel} />
+					: ""}
 			</p>
 
 			<p class={style.small}>
@@ -124,40 +128,13 @@ const Select = ({ label, value, options, onChange }) => {
 };
 
 function ChannelSelector(props) {
-	const { channel, onChange } = props;
-
-	const options = [
-		{
-			label: 'NABU Network 1984 Cycle v1', value: 'cycle 1 raw',
-			channel: { imageDir: 'cycle%25201%2520raw', imageName: null }
-		},
-		{
-			label: 'NABU Network 1984 Cycle v2', value: 'cycle 2 raw',
-			channel: { imageDir: 'cycle%25202%2520raw', imageName: null }
-		},
-		{
-			label: 'DJs Playground Cycle', value: 'cycle DJ raw',
-			channel: { imageDir: 'cycle%2520DJ%2520raw', imageName: null }
-		},
-		{
-			label: 'Pac-Man', value: 'pac-man.nabu',
-			channel: { imageDir: 'HomeBrew/titles', imageName: 'pac-man.nabu' }
-		},
-		{
-			label: 'Snake', value: 'snake',
-			channel: { imageDir: 'HomeBrew/titles', imageName: 'snake.nabu' }
-		},
-		{
-			label: 'Tetris', value: 'tetris',
-			channel: { imageDir: 'HomeBrew/titles', imageName: 'tetris.nabu' }
-		},
-	];
+	const { channelList, onChange } = props;
 
 	const [value, setValue] = useState('cycle 2 raw');
 
 	const selectChannel = event => {
 		setValue(event.target.value);
-		const newChannel = options.find(v => v.value === event.target.value).channel;
+		const newChannel = channelList.find(v => v.value === event.target.value).channel;
 		onChange({ target: { value: newChannel } });
 	};
 
@@ -165,7 +142,7 @@ function ChannelSelector(props) {
 		<span class={style.channel}>
 			<Select
 				label='Channel:'
-				options={options}
+				options={channelList}
 				value={value}
 				onChange={selectChannel} />
 		</span>

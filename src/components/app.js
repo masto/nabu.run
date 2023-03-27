@@ -11,7 +11,7 @@
 // limitations under the License.
 
 import { Router } from 'preact-router';
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { useMachine } from 'preact-robot';
 
 import adaptorMachine from '/machines/adaptor';
@@ -21,31 +21,57 @@ import { AdaptorContext } from './adaptor-context';
 import Home from '../routes/home';
 import Faq from '../routes/home/faq';
 
-const initState = () => {
-	let baseUrl = '', imageDir = '', imageName;
+const initConfig = () => {
+	let
+		baseUrl = '',
+		imageDir = '',
+		imageName = null,
+		channelsUrl = 'channels.json';
 	try { baseUrl = process.env.PREACT_APP_BASE_URL } catch { };
 	try { imageDir = process.env.PREACT_APP_IMAGE_DIR } catch { };
 	try { imageName = process.env.PREACT_APP_IMAGE_NAME } catch { };
+	try { channelsUrl = process.env.PREACT_APP_CHANNELS_URL } catch { };
 
-	return { baseUrl, imageDir, imageName };
+	return {
+		channelsUrl,
+		channel: { baseUrl, imageDir, imageName }
+	};
 }
 
-const config = {
-	channel: initState()
+// This is the only way I've been able to allow the state machine to
+// have access to live app configuration.
+const extern_config = {};
+const syncConfig = newConfig => {
+	for (let k in extern_config) delete extern_config[k];
+	Object.assign(extern_config, newConfig);
 };
 
-const setConfig = newConfig => {
-	Object.assign(config, newConfig);
+const loadChannelList = async (url) => {
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error(`fetch channels: ${response.status}`);
+	}
+
+	const channels = await response.json();
+
+	return channels;
 };
 
-const getChannel = () => config.channel;
 
 const App = () => {
-	let adaptor = useMachine(adaptorMachine, {
+	const [config, setConfig] = useState(initConfig());
+	useEffect(() => syncConfig(config), [config]);
+
+	const adaptor = useMachine(adaptorMachine, {
 		// Use of `navigator` breaks pre-rendering, so wrap it in a guard
 		serial: typeof window !== 'undefined' ? navigator?.serial : undefined,
-		getChannel
+		getChannel: () => extern_config.channel
 	});
+
+	useEffect(() => {
+		if (config.channelsUrl)
+			loadChannelList(config.channelsUrl).then(list => setConfig({ ...config, channelList: list }));
+	}, []);
 
 	return (
 		<ConfigContext.Provider value={[config, setConfig]}>
