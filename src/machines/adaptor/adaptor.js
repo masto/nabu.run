@@ -60,7 +60,7 @@ const dispatch = (expectMsg, nextState) => transition('done', nextState,
   guard(ctx => {
     if (ctx.readBuffer[0] === expectMsg) {
       ctx.readBuffer.shift();
-      console.log(`-> ${nextState}`);
+      ctx.log(`-> ${nextState}`);
       return true;
     }
   })
@@ -88,7 +88,7 @@ const processMessages = invoke(
   dispatch(NABU.MSG_RN_FH_CLOSE, 'handleFhCloseMsg'),
 
   transition('done', 'reset', action(ctx => {
-    console.log(`Unhandled NABU message ${hex(ctx.readBuffer[0])}`);
+    ctx.log(`Unhandled NABU message ${hex(ctx.readBuffer[0])}`);
   })),
   resetOnError
 );
@@ -112,7 +112,7 @@ const machine = createMachine({
   error: state(immediate(
     'stopped',
     action(ctx => {
-      console.log('fatal error: ', ctx.error);
+      ctx.log('fatal error: ', ctx.error);
     })
   )),
 
@@ -132,7 +132,7 @@ const machine = createMachine({
     immediate('openingPort',
       guard(ctx => ctx.foundPorts?.length),
       action(ctx => {
-        console.log('found a port, skipping request', ctx.foundPorts);
+        ctx.log('found a port, skipping request', ctx.foundPorts);
         // Just assume the first one in the list. It'd be unusual to choose
         // multiple ports, but if this is the wrong one, the user will
         // probably close it and we can try again.
@@ -154,7 +154,7 @@ const machine = createMachine({
   requestingPort: invoke(ctx => ctx.serial.requestPort(),
     transition('done', 'openingPort',
       reduce((ctx, ev) => {
-        console.log(ev);
+        ctx.log(ev);
         return { ...ctx, port: ev.data }
       })
     ),
@@ -171,7 +171,7 @@ const machine = createMachine({
   // This is the return path from the NABU protocol states if the serial
   // port goes away.
   closed: state(
-    immediate('start', action(() => { console.log('port was closed') }))
+    immediate('start', action(() => { ctx.log('port was closed') }))
   ),
 
   /*
@@ -199,7 +199,7 @@ const machine = createMachine({
   // in order to start over again.
   reset: state(
     immediate('startConnection', action(ctx => {
-      console.log('RESET');
+      ctx.log('RESET');
       // Need to release these or we won't be able to grab them again.
       ctx.reader?.releaseLock();
       ctx.writer?.releaseLock();
@@ -225,11 +225,13 @@ const machine = createMachine({
 
   // Read some data we don't care about, and throw it away
   sendChangeChannelAck: sendBytes(NABU.MSGSEQ_ACK, 'handleChangeChannel'),
-  handleChangeChannel: processBytes(2, bytes => console.log(`change channel: [${hex(bytes)}]`), 'sendConfirmed'),
+  handleChangeChannel: processBytes(2, (bytes, ctx) =>
+    ctx.log(`change channel: [${hex(bytes)}]`), 'sendConfirmed'),
 
   // ¯\_(ツ)_/¯
   sendMysteryAck: sendBytes(NABU.MSGSEQ_ACK, 'getMysteryBytes'),
-  getMysteryBytes: processBytes(2, bytes => console.log(`mystery bytes: [${hex(bytes)}]`), 'sendConfirmed'),
+  getMysteryBytes: processBytes(2, (bytes, ctx) =>
+    ctx.log(`mystery bytes: [${hex(bytes)}]`), 'sendConfirmed'),
 
   /*
    *  Packet handling
@@ -240,7 +242,7 @@ const machine = createMachine({
   handlePacketReq: invoke(
     ctx => getBytes(ctx, 4).then(bytes => {
       // Unpack which segment and pak ID were requested
-      console.log(`packet req: ${hex(bytes)}`);
+      ctx.log(`packet req: ${hex(bytes)}`);
       let segment = bytes[0];
       let imageId = bytes[3] << 16 | bytes[2] << 8 | bytes[1];
 
@@ -249,7 +251,7 @@ const machine = createMachine({
     // We don't handle the clock yet, let the other IAs have some value :-)
     transition('done', 'sendPacketUnauthorized',
       guard(ctx => ctx.image.imageId === NABU.IMAGE_TIME),
-      action(() => console.log("rejecting time request"))
+      action(ctx => ctx.log("rejecting time request"))
     ),
     transition('done', 'loadImageData'),
     resetOnError
@@ -272,13 +274,13 @@ const machine = createMachine({
 
     // We retain the last image since multiple segments will be requested
     if (ctx?.image?.url !== url) {
-      console.log('preparing new image');
+      ctx.log('preparing new image');
       ctx.image = {
         url, fileId, imageId: ctx.image.imageId, segment: ctx.image.segment
       };
     }
 
-    console.log(`segment ${hex(ctx.image.segment)} image ${hex(ctx.image.imageId, 6)}`);
+    ctx.log(`segment ${hex(ctx.image.segment)} image ${hex(ctx.image.imageId, 6)}`);
   },
     transition('done', 'preparePacket'),
     resetOnError
@@ -292,7 +294,7 @@ const machine = createMachine({
 
     // We don't have the data, so get it from the Internet. Browsers are
     // good at this.
-    console.log('Fetching image remotely');
+    ctx.log('Fetching image remotely');
 
     // It's getting time
     resolve(
@@ -353,7 +355,7 @@ const machine = createMachine({
     new DataView(buf.buffer).setUint16(packetLen, crc);
 
     ctx.image.buf = buf;
-  }).catch(error => { console.log(error); throw error; }),
+  }).catch(error => { ctx.log(error); throw error; }),
     transition('done', 'sendPacketAuthorized'),
     transition('error', 'sendPacketUnauthorized')),
 
@@ -368,6 +370,8 @@ const machine = createMachine({
 
   ...retroNetStates
 },
-  initialContext => ({ baud: 111816, ...initialContext }));
+  initialContext => ({
+    baud: 111816, log: (...a) => { }, ...initialContext
+  }));
 
 export default machine;

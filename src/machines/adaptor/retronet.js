@@ -54,7 +54,7 @@ export const retroNetStates = {
       const fileFlag = new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
       let fileHandle = (await getBytes(ctx, 1))[0];
 
-      console.log(`open ${fileName} [${fileHandle}] ${fileFlag & 1 ? 'ro' : 'rw'}`);
+      ctx.log(`open ${fileName} [${fileHandle}] ${fileFlag & 1 ? 'ro' : 'rw'}`);
 
       ctx.handles ||= [];
       if (fileHandle === 0xff || ctx.handles[fileHandle]) fileHandle = ctx.handles.length;
@@ -62,7 +62,7 @@ export const retroNetStates = {
 
       ctx.handles[fileHandle] = { fileName, fileFlag };
 
-      console.log(`allocated handle ${hex(fileHandle)}`);
+      ctx.log(`allocated handle ${hex(fileHandle)}`);
 
       return ctx.writer.write(new Uint8Array([fileHandle]).buffer);
     },
@@ -109,7 +109,7 @@ export const retroNetStates = {
       dv.setUint8(18, fileName.length);
       new TextEncoder().encodeInto(fileName, reply.subarray(19, 83));
 
-      console.log(`file details: ${hex(reply)}`);
+      ctx.log(`file details: ${hex(reply)}`);
 
       return ctx.writer.write(reply.buffer);
     },

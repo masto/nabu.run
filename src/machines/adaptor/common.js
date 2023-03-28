@@ -29,7 +29,7 @@ export const fatalError = transition('error', 'error',
 export const resetOnError = transition('error', 'reset',
   reduce((ctx, ev) => ({ ...ctx, error: ev.error })),
   action(ctx => {
-    console.log(ctx.error);
+    ctx.log(ctx.error);
   })
 );
 
@@ -54,7 +54,7 @@ export const bufferUntil = async (ctx, matchFn) => {
       throw new Error('got done while buffering');
     }
 
-    console.log(`read: ${hex(value)}`);
+    ctx.log(`read: ${hex(value)}`);
     ctx.readBuffer.push(...value);
   }
 };
@@ -77,7 +77,7 @@ export const processBytes = (count, cb, nextState) => invoke(
 export const expectToReceive = (expectValue, nextState) => invoke(
   ctx => bufferUntil(ctx, ctx => {
     let expectArray = [expectValue].flat(3);
-    console.log(`want [${hex(expectArray)}] have [${hex(ctx.readBuffer)}]`);
+    ctx.log(`want [${hex(expectArray)}] have [${hex(ctx.readBuffer)}]`);
     let l = Math.min(ctx.readBuffer.length, expectArray.length);
     // We might not have all the bytes we want, but check the ones we do have
     if (!expectArray.slice(0, l).every((v, i) => v === ctx.readBuffer[i])) {
