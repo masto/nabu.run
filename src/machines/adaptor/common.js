@@ -34,9 +34,9 @@ export const resetOnError = transition('error', 'reset',
 );
 
 // Output is pretty straightforward
-export const sendBytes = (byteArray, nextState) => invoke(
+export const sendBytes = (byteArray, nextState, ...args) => invoke(
   ctx => ctx.writer.write(new Uint8Array([byteArray].flat(3))),
-  transition('done', nextState),
+  transition('done', nextState, ...args),
   resetOnError
 );
 

@@ -100,7 +100,7 @@ function AdaptorState(props) {
 	const port = current.context?.port;
 	const progress = current.context?.progress;
 
-	const hasOpenFiles = current.context?.handles?.some(e => e);
+	const hasOpenFiles = current.context?.rn?.handles?.some(e => e);
 
 	const portStatus = port ? (() => {
 		const i = port.getInfo();
@@ -114,7 +114,7 @@ function AdaptorState(props) {
 			<div>Port: {portStatus}</div>
 			{progress ? <div class={style.progressMessage}>{progress.message}</div> : ""}
 			{progress?.complete ? <ProgressIndicator complete={progress.complete} total={progress.total} /> : ""}
-			{hasOpenFiles ? <OpenFileList handles={current.context.handles} /> : ""}
+			{hasOpenFiles ? <OpenFileList handles={current.context.rn.handles} /> : ""}
 		</p>
 	);
 }

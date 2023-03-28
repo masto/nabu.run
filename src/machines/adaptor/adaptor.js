@@ -76,10 +76,10 @@ const processMessages = invoke(
   dispatch(NABU.STATUS_SIGNAL, 'sendChannelStatus'),
   dispatch(NABU.STATUS_TRANSMIT, 'sendFinished'),
   dispatch(NABU.MSG_MYSTERY, 'sendMysteryAck'),
-  dispatch(NABU.MSG_PACKET_REQUEST, 'sendPacketReqAck'),
+  dispatch(NABU.MSG_PACKET_REQUEST, 'handlePacketReq'),
   dispatch(NABU.MSG_CHANGE_CHANNEL, 'sendChangeChannelAck'),
 
-  // RetroNet
+  // RetroNET
   dispatch(NABU.MSG_RN_FILE_SIZE, 'handleFileSizeMsg'),
   dispatch(NABU.MSG_RN_FILE_OPEN, 'handleFileOpenMsg'),
   dispatch(NABU.MSG_RN_FH_DETAILS, 'handleFhDetailsMsg'),
@@ -92,6 +92,7 @@ const processMessages = invoke(
   })),
   resetOnError
 );
+
 
 // Now after all that prep work, the state machine definition:
 const machine = createMachine({
@@ -171,7 +172,11 @@ const machine = createMachine({
   // This is the return path from the NABU protocol states if the serial
   // port goes away.
   closed: state(
-    immediate('start', action(() => { ctx.log('port was closed') }))
+    immediate('start', action(ctx => {
+      delete ctx.progress;
+      delete ctx.rn;
+      ctx.log('port was closed');
+    }))
   ),
 
   /*
@@ -187,6 +192,7 @@ const machine = createMachine({
         ctx.reader = ctx.port.readable.getReader();
         ctx.writer = ctx.port.writable.getWriter();
         ctx.readBuffer = [];
+        ctx.rn = {}; // RetroNET context
         delete ctx.image;
         delete ctx.progress;
       })
@@ -214,7 +220,9 @@ const machine = createMachine({
   idle: processMessages,
 
   // Trivial responses that do no work and return to idle.
-  sendInit: sendBytes([NABU.MSGSEQ_ACK, NABU.STATE_CONFIRMED], 'idle'),
+  sendInit: sendBytes([NABU.MSGSEQ_ACK, NABU.STATE_CONFIRMED], 'idle',
+    // Cleans up stale RetroNET context after a reset
+    action(ctx => ctx.rn = {})),
   sendStatusGood: sendBytes(NABU.MSGSEQ_ACK, 'idle'),
   sendChannelStatus: sendBytes([NABU.SIGNAL_STATUS_YES, NABU.MSGSEQ_FINISHED], 'idle'),
   sendConfirmed: sendBytes(NABU.STATE_CONFIRMED, 'idle'),
@@ -238,8 +246,8 @@ const machine = createMachine({
    */
 
   // Finally, the point where we work with some actual data.
-  sendPacketReqAck: sendBytes(NABU.MSGSEQ_ACK, 'handlePacketReq'),
-  handlePacketReq: invoke(
+  handlePacketReq: sendBytes(NABU.MSGSEQ_ACK, 'getPacketReq'),
+  getPacketReq: invoke(
     ctx => getBytes(ctx, 4).then(bytes => {
       // Unpack which segment and pak ID were requested
       ctx.log(`packet req: ${hex(bytes)}`);
@@ -372,7 +380,7 @@ const machine = createMachine({
   ...retroNetStates
 },
   initialContext => ({
-    baud: 111816, log: (...a) => { }, ...initialContext
+    baud: 111816, log: (...a) => { console.log(...a) }, ...initialContext
   }));
 
 export default machine;
