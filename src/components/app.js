@@ -26,14 +26,17 @@ const initConfig = () => {
 		baseUrl = '',
 		imageDir = '',
 		imageName = null,
-		channelsUrl = '/channels.json';
+		channelsUrl = '/channels.json',
+		rnProxyUrl = '';
 	try { baseUrl = process.env.PREACT_APP_BASE_URL } catch { };
 	try { imageDir = process.env.PREACT_APP_IMAGE_DIR } catch { };
 	try { imageName = process.env.PREACT_APP_IMAGE_NAME } catch { };
 	try { channelsUrl = process.env.PREACT_APP_CHANNELS_URL } catch { };
+	try { rnProxyUrl = process.env.PREACT_APP_RETRONET_PROXY } catch { };
 
 	return {
 		channelsUrl,
+		rnProxyUrl,
 		channel: { baseUrl, imageDir, imageName }
 	};
 }
@@ -65,7 +68,8 @@ const App = () => {
 	const adaptor = useMachine(adaptorMachine, {
 		// Use of `navigator` breaks pre-rendering, so wrap it in a guard
 		serial: typeof window !== 'undefined' ? navigator?.serial : undefined,
-		getChannel: () => extern_config.channel
+		getChannel: () => extern_config.channel,
+		rnProxyUrl: config.rnProxyUrl
 	});
 
 	useEffect(() => {

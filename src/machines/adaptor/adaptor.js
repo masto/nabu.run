@@ -20,86 +20,15 @@ import {
 } from 'robot3';
 import { crc16ccitt } from 'crc';
 import { hex, escapeNabuMsg } from './util';
+
+import {
+  fatalError, resetOnError, getBytes, sendBytes, bufferUntil, processBytes,
+  expectToReceive
+} from './common';
+import { retroNetStates } from './retronet';
 import * as NABU from './constants';
 
-// The formal state machine is defined at the end of the file.
-// First we start with some reusable components.
-
-// When there's no recovery, this transition will log and halt.
-const fatalError = transition('error', 'error',
-  reduce((ctx, ev) => ({ ...ctx, error: ev.error }))
-);
-
-// Most of the time, if something unexpected happens in the protocol, we
-// just want to reset the state machine and try to recover.
-const resetOnError = transition('error', 'reset',
-  reduce((ctx, ev) => ({ ...ctx, error: ev.error })),
-  action(ctx => {
-    console.log(ctx.error);
-  })
-);
-
-// Output is pretty straightforward
-const sendBytes = (byteArray, nextState) => invoke(
-  ctx => ctx.writer.write(new Uint8Array([byteArray].flat(3))),
-  transition('done', nextState),
-  resetOnError
-);
-
-// The next several functions are concerned with robustly handling the
-// input side of things.
-
-// All incoming reads go through this function. It will read until the
-// supplied predicate function returns true. Input is buffered because we
-// can't control how much we get back from read().
-const bufferUntil = async (ctx, matchFn) => {
-  while (!matchFn(ctx)) {
-    let { value, done } = await ctx.reader.read();
-    if (done) {
-      // done is like end of file, it's wildly unexpected for a serial port
-      throw new Error('got done while buffering');
-    }
-
-    console.log(`read: ${hex(value)}`);
-    ctx.readBuffer.push(...value);
-  }
-};
-
-// Now build on the above to hold out for a specified number of bytes.
-const getBytes = async (ctx, count) => {
-  await bufferUntil(ctx, ctx => ctx.readBuffer.length >= count);
-  return ctx.readBuffer.splice(0, count);
-};
-
-// Another layer on top: get some bytes and do a callback on them.
-const processBytes = (count, cb, nextState) => invoke(
-  ctx => getBytes(ctx, count).then(result => cb(result, ctx)),
-  transition('done', nextState),
-  resetOnError
-);
-
-// This is a fancier matcher that expects a specific sequence of byte(s).
-// If if gets anything else, it will bail out to reset.
-const expectToReceive = (expectValue, nextState) => invoke(
-  ctx => bufferUntil(ctx, ctx => {
-    let expectArray = [expectValue].flat(3);
-    console.log(`want [${hex(expectArray)}] have [${hex(ctx.readBuffer)}]`);
-    let l = Math.min(ctx.readBuffer.length, expectArray.length);
-    // We might not have all the bytes we want, but check the ones we do have
-    if (!expectArray.slice(0, l).every((v, i) => v === ctx.readBuffer[i])) {
-      throw new Error(`Expected ${hex(expectValue)}, got ${hex(ctx.readBuffer)}`);
-    }
-
-    // Did we have enough to check them all?
-    if (ctx.readBuffer.length < expectArray.length) return false;
-
-    // Remove the bytes that were matched
-    ctx.readBuffer.splice(0, expectArray.length);
-    return true;
-  }),
-  transition('done', nextState),
-  resetOnError
-);
+// The state machine is defined after a few convenience functions.
 
 // Fill in the 16-byte packet header.
 const setHeader = (buf, imageId, segment, offset, isLast) => {
@@ -137,11 +66,6 @@ const dispatch = (expectMsg, nextState) => transition('done', nextState,
   })
 );
 
-// @masto the minimum RetroNet API surface for cloud cp / m is: FILE_OPEN,
-// FILE_SIZE, FH_READ, FH_READSEQ, FH_CLOSE 
-// And if it wasn't for the 1st stage loader, you wouldn't need FH_READSEQ
-// read: 0xa8 0x0e 0x42 0x49 0x4f 0x53 0x5f 0x43 0x50 0x4d 0x32 0x32 0x2e 0x42 0x49 0x4e
-
 // Use that dispatch function to generate a bunch of 'done' transitions
 // with guards that control which one gets to handle it. Clever, huh?
 const processMessages = invoke(
@@ -168,179 +92,6 @@ const processMessages = invoke(
   })),
   resetOnError
 );
-
-const bytesToString = bytes => new TextDecoder().decode(new Uint8Array(bytes));
-
-const retroNetStates = {
-  handleFileSizeMsg: invoke(
-    async ctx => {
-      const len = (await getBytes(ctx, 1))[0];
-      const filename = bytesToString(await getBytes(ctx, len));
-
-      console.log(`getting file size for ${filename}`);
-      const response = await fetch(filename);
-      let size = -1;
-      if (response.ok) {
-        const fileData = await response.arrayBuffer();
-        ctx.files ||= {};
-        ctx.files[filename] = { fileData };
-        size = fileData.byteLength;
-      }
-
-      const reply = new Uint8Array(4);
-      new DataView(reply.buffer).setUint32(0, size, true);
-      return ctx.writer.write(reply.buffer);
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
-
-  handleFileOpenMsg: invoke(
-    async ctx => {
-      const len = (await getBytes(ctx, 1))[0];
-      const filename = bytesToString(await getBytes(ctx, len));
-      const fileFlag = new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
-      let fileHandle = (await getBytes(ctx, 1))[0];
-
-      console.log(`open ${filename} [${fileHandle}] ${fileFlag & 1 ? 'ro' : 'rw'}`);
-
-      ctx.handles ||= [];
-      if (fileHandle === 0xff || ctx.handles[fileHandle]) fileHandle = ctx.handles.length;
-      if (fileHandle >= 0xff) return ctx.writer.write(new Uint8Array([0xff]).buffer);
-
-      ctx.handles[fileHandle] = { filename, fileFlag };
-
-      console.log(`allocated handle ${hex(fileHandle)}`);
-
-      return ctx.writer.write(new Uint8Array([fileHandle]).buffer);
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
-
-  handleFhDetailsMsg: invoke(
-    async ctx => {
-      const fileHandle = (await getBytes(ctx, 1))[0];
-      const file = ctx.handles[fileHandle];
-      const filename = file.filename;
-
-      ctx.files ||= {};
-
-      if (!ctx.files[filename]) {
-        const response = await fetch(filename);
-        if (!response.ok) throw new Error(response.status);
-        const fileData = await response.arrayBuffer();
-        ctx.files[filename] = { fileData };
-      }
-
-      const fileData = ctx.files[filename].fileData;
-
-      const reply = new Uint8Array(83);
-      const dv = new DataView(reply.buffer);
-
-      dv.setUint32(0, fileData.byteLength, true); // file_size
-
-      dv.setUint16(4, 2023, true); // year
-      dv.setUint8(6, 2); // month
-      dv.setUint8(7, 3); // day
-      dv.setUint8(8, 5); // hour
-      dv.setUint8(9, 10); // minute
-      dv.setUint8(10, 10); // second
-
-      dv.setUint16(11, 2023, true); // year
-      dv.setUint8(13, 2); // month
-      dv.setUint8(14, 3); // day
-      dv.setUint8(15, 5); // hour
-      dv.setUint8(16, 10); // minute
-      dv.setUint8(17, 10); // second
-
-      dv.setUint8(18, filename.length);
-      new TextEncoder().encodeInto(filename, reply.subarray(19, 83));
-
-      console.log(`file details: ${hex(reply)}`);
-
-      return ctx.writer.write(reply.buffer);
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
-
-  handleFhReadseqMsg: invoke(
-    async ctx => {
-      const fileHandle = (await getBytes(ctx, 1))[0];
-      const reqLength = new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
-      const file = ctx.handles[fileHandle];
-
-      const filename = file.filename;
-      if (!ctx.files[filename]) {
-        const response = await fetch(filename);
-        if (!response.ok) throw new Error(response.status);
-        const fileData = await response.arrayBuffer();
-        ctx.files[filename] = { fileData };
-      }
-
-      const fileData = ctx.files[filename].fileData;
-
-      const pos = ctx.handles[fileHandle]?.pos ?? 0;
-      let end = pos + reqLength;
-      if (end > fileData.byteLength) end = fileData.byteLength;
-
-      const length = end - pos;
-
-      console.log(`return seq ${pos}-${end - 1} (${length}) of ${reqLength}, ${fileData.byteLength}`);
-
-      ctx.handles[fileHandle].pos = end;
-
-      const returnLength = new Uint8Array(2);
-      new DataView(returnLength.buffer).setUint16(0, length, true);
-      await ctx.writer.write(returnLength.buffer);
-      if (length == 0) return;
-      return ctx.writer.write(fileData.slice(pos, end));
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
-
-  handleFhReadMsg: invoke(
-    async ctx => {
-      const fileHandle = (await getBytes(ctx, 1))[0];
-      const reqOffset = new DataView(new Uint8Array(await getBytes(ctx, 4)).buffer).getUint32(0, true);
-      const reqLength = new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
-      const file = ctx.handles[fileHandle];
-
-      ctx.files[file.filename] ||= { fileData: new ArrayBuffer() };
-      const fileData = ctx.files[file.filename].fileData;
-
-      const pos = reqOffset;
-      let end = pos + reqLength;
-      if (end > fileData.byteLength) end = fileData.byteLength;
-
-      const length = end - pos;
-
-      console.log(`return read ${pos}-${end - 1} (${length}) of ${reqLength}, ${fileData.byteLength}`);
-
-      ctx.handles[fileHandle].pos = end;
-
-      const returnLength = new Uint8Array(2);
-      new DataView(returnLength.buffer).setUint16(0, length, true);
-      await ctx.writer.write(returnLength.buffer);
-      if (length == 0) return;
-      return ctx.writer.write(fileData.slice(pos, end));
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
-
-  handleFhCloseMsg: invoke(
-    async ctx => {
-      const fileHandle = (await getBytes(ctx, 1))[0];
-      delete ctx.handles[fileHandle];
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
-
-};
 
 // Now after all that prep work, the state machine definition:
 const machine = createMachine({
