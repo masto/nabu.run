@@ -84,12 +84,15 @@ function OpenFileList(props) {
 	const { handles } = props;
 
 	return (
-		<ul>
-			{handles.map((fh, i) =>
-				<li>{'{' + i + '}'} {baseName(fh.fileName)}
-					{fh.fileFlag & 1 ? ' (rw)' : ' (ro)'}</li>
-			)}
-		</ul>
+		<div class={style.openFileList}>
+			<h2>Open files</h2>
+			<ul>
+				{handles.map((fh, i) =>
+					<li>{'{' + i + '}'} {baseName(fh.fileName)}
+						{fh.fileFlag & 1 ? ' (rw)' : ' (ro)'}</li>
+				)}
+			</ul>
+		</div>
 	);
 }
 

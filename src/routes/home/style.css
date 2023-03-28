@@ -77,6 +77,25 @@
   background-color: var(--nabu-light-yellow);
 }
 
+.openFileList {
+  color: var(--nabu-cyan);
+}
+
+.openFileList h2 {
+  font-size: 75%;
+  text-align: left;
+  text-decoration: underline;
+  margin-bottom: auto;
+}
+
+.openFileList ul {
+  list-style: none;
+  padding-left: inherit;
+  font-size: 65%;
+  line-height: initial;
+  margin-top: auto;
+}
+
 button.port {
   background-color: var(--nabu-dark-green);
   border: none;
