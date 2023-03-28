@@ -13,6 +13,7 @@
 import { useContext, useState } from 'preact/hooks';
 import { AdaptorContext } from '../../components/adaptor-context';
 import { ConfigContext } from '../../components/config-context';
+import { baseName } from '../../machines/adaptor/util';
 import style from './style.css';
 
 const hex = (d, l = 2) => '0x' + Number(d).toString(16).padStart(l, '0');
@@ -79,12 +80,27 @@ function ProgressIndicator(props) {
 	);
 }
 
+function OpenFileList(props) {
+	const { handles } = props;
+
+	return (
+		<ul>
+			{handles.map((fh, i) =>
+				<li>{'{' + i + '}'} {baseName(fh.fileName)}
+					{fh.fileFlag & 1 ? ' (rw)' : ' (ro)'}</li>
+			)}
+		</ul>
+	);
+}
+
 function AdaptorState(props) {
 	const { current, onChange } = props;
 
 	const state = current.name;
 	const port = current.context?.port;
 	const progress = current.context?.progress;
+
+	const hasOpenFiles = current.context?.handles?.some(e => e);
 
 	const portStatus = port ? (() => {
 		const i = port.getInfo();
@@ -96,8 +112,9 @@ function AdaptorState(props) {
 		<p>
 			<div>Adaptor state: {state}</div>
 			<div>Port: {portStatus}</div>
-			{progress ? <div>Loading {progress.fileName}</div> : ""}
-			{progress ? <ProgressIndicator complete={progress.complete} total={progress.total} /> : ""}
+			{progress ? <div class={style.progressMessage}>{progress.message}</div> : ""}
+			{progress?.complete ? <ProgressIndicator complete={progress.complete} total={progress.total} /> : ""}
+			{hasOpenFiles ? <OpenFileList handles={current.context.handles} /> : ""}
 		</p>
 	);
 }

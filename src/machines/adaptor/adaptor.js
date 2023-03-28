@@ -340,7 +340,8 @@ const machine = createMachine({
     }
 
     ctx.progress = {
-      fileName: ctx.image.fileId, total: dataSize, complete: offset + len
+      fileName: ctx.image.fileId, total: dataSize, complete: offset + len,
+      message: `Loading ${ctx.image.fileId}`
     };
 
     let packetLen = len + NABU.HEADERSIZE;

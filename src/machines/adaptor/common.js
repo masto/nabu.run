@@ -29,7 +29,7 @@ export const fatalError = transition('error', 'error',
 export const resetOnError = transition('error', 'reset',
   reduce((ctx, ev) => ({ ...ctx, error: ev.error })),
   action(ctx => {
-    ctx.log(ctx.error);
+    console.log(ctx.error);
   })
 );
 

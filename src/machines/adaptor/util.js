@@ -24,3 +24,7 @@ export function escapeNabuMsg(inBuf) {
     [...inBuf].map(v => v === NABU_MSG_ESCAPE ? [NABU_MSG_ESCAPE, v] : v).flat()
   );
 }
+
+export function baseName(path) {
+  return path.match(/[^\/]*$/)[0];
+}
