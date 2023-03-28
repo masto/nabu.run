@@ -97,3 +97,34 @@ export const MSG_RN_FH_DETAILS = 0xb4;
 export const MSG_RN_FH_READSEQ = 0xb5;
 export const MSG_RN_FH_READ = 0xa5;
 export const MSG_RN_FH_CLOSE = 0xa7;
+
+// Not yet implemented
+export const MSG_RN_FH_SIZE = 0xa4;
+export const MSG_RN_FH_APPEND = 0xa9;
+export const MSG_RN_FH_INSERT = 0xaa;
+export const MSG_RN_FH_DELETE_RANGE = 0xab;
+export const MSG_RN_FH_REPLACE = 0xac;
+export const MSG_RN_FILE_DELETE = 0xad;
+export const MSG_RN_FILE_COPY = 0xae;
+export const MSG_RN_FILE_MOVE = 0xaf;
+export const MSG_RN_FH_TRUNCATE = 0xb0;
+export const MSG_RN_FILE_LIST = 0xb1;
+export const MSG_RN_FILE_LIST_ITEM = 0xb2;
+export const MSG_RN_FILE_DETAILS = 0xb3;
+export const MSG_RN_FH_SEEK = 0xb6;
+
+export const unimplemented = {
+   [MSG_RN_FH_SIZE]: 'MSG_RN_FH_SIZE',
+   [MSG_RN_FH_APPEND]: 'MSG_RN_FH_APPEND',
+   [MSG_RN_FH_INSERT]: 'MSG_RN_FH_INSERT',
+   [MSG_RN_FH_DELETE_RANGE]: 'MSG_RN_FH_DELETE_RANGE',
+   [MSG_RN_FH_REPLACE]: 'MSG_RN_FH_REPLACE',
+   [MSG_RN_FILE_DELETE]: 'MSG_RN_FILE_DELETE',
+   [MSG_RN_FILE_COPY]: 'MSG_RN_FILE_COPY',
+   [MSG_RN_FILE_MOVE]: 'MSG_RN_FILE_MOVE',
+   [MSG_RN_FH_TRUNCATE]: 'MSG_RN_FH_TRUNCATE',
+   [MSG_RN_FILE_LIST]: 'MSG_RN_FILE_LIST',
+   [MSG_RN_FILE_LIST_ITEM]: 'MSG_RN_FILE_LIST_ITEM',
+   [MSG_RN_FILE_DETAILS]: 'MSG_RN_FILE_DETAILS',
+   [MSG_RN_FH_SEEK]: 'MSG_RN_FH_SEEK'
+};

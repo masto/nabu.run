@@ -88,7 +88,13 @@ const processMessages = invoke(
   dispatch(NABU.MSG_RN_FH_CLOSE, 'handleFhCloseMsg'),
 
   transition('done', 'reset', action(ctx => {
-    ctx.log(`Unhandled NABU message ${hex(ctx.readBuffer[0])}`);
+    const code = ctx.readBuffer[0];
+    const msg = NABU.unimplemented[code];
+    ctx.log(`Unhandled NABU message ${msg ?? hex(code)}`);
+
+    // Only tell the user about known unimplemented messages, otherwise
+    // this could cause an alert storm with garbage data.
+    if (msg !== undefined) alert(`${msg} is not yet implemented`);
   })),
   resetOnError
 );
