@@ -93,7 +93,6 @@ const processMessages = invoke(
   resetOnError
 );
 
-
 // Now after all that prep work, the state machine definition:
 const machine = createMachine({
   /*
@@ -161,7 +160,7 @@ const machine = createMachine({
     ),
     transition('error', 'waitingForPort')),
 
-  // Now we have a port, so open it
+  // Now we have a port, so open it.
   openingPort: invoke(ctx => ctx.port.open({
     baudRate: ctx.baud, dataBits: 8, stopBits: 2, parity: 'none'
   }),
@@ -197,7 +196,7 @@ const machine = createMachine({
         delete ctx.progress;
       })
     ),
-    // If the port was found to be unusable, bail out of the NABU loop
+    // If the port was found to be unusable, bail out of the NABU loop.
     immediate('closed')
   ),
 
@@ -221,7 +220,7 @@ const machine = createMachine({
 
   // Trivial responses that do no work and return to idle.
   sendInit: sendBytes([NABU.MSGSEQ_ACK, NABU.STATE_CONFIRMED], 'idle',
-    // Cleans up stale RetroNET context after a reset
+    // Cleans up stale RetroNET context after a reset.
     action(ctx => ctx.rn = {})),
   sendStatusGood: sendBytes(NABU.MSGSEQ_ACK, 'idle'),
   sendChannelStatus: sendBytes([NABU.SIGNAL_STATUS_YES, NABU.MSGSEQ_FINISHED], 'idle'),
@@ -231,7 +230,7 @@ const machine = createMachine({
   // You want reset, I give you reset.
   handleResetMsg: sendBytes([NABU.MSGSEQ_ACK, NABU.STATE_CONFIRMED], 'reset'),
 
-  // Read some data we don't care about, and throw it away
+  // Read some data we don't care about, and throw it away.
   sendChangeChannelAck: sendBytes(NABU.MSGSEQ_ACK, 'handleChangeChannel'),
   handleChangeChannel: processBytes(2, (bytes, ctx) =>
     ctx.log(`change channel: [${hex(bytes)}]`), 'sendConfirmed'),
@@ -280,7 +279,7 @@ const machine = createMachine({
 
     const { url, fileId } = makeImageUrl(ctx.image.imageId, ctx.getChannel());
 
-    // We retain the last image since multiple segments will be requested
+    // We retain the last image since multiple segments will be requested.
     if (ctx?.image?.url !== url) {
       ctx.log('preparing new image');
       ctx.image = {
@@ -294,17 +293,17 @@ const machine = createMachine({
     resetOnError
   ),
 
-  // The meat of the thing is serving a segment of the requested file
+  // The meat of the thing is serving a segment of the requested file.
   preparePacket: invoke(ctx => new Promise((resolve, reject) => {
-    // First, download the file from the cloud, if necessary
-    // Check to see if it has already been downloaded and stuffed in ctx
+    // First, download the file from the cloud, if necessary.
+    // Check to see if it has already been downloaded and stuffed in ctx.
     if (ctx.image.data) return resolve(ctx.image.data);
 
     // We don't have the data, so get it from the Internet. Browsers are
     // good at this.
     ctx.log('Fetching image remotely');
 
-    // It's getting time
+    // It's getting time.
     resolve(
       fetch(ctx.image.url).then(response => {
         // This can go one of two ways
@@ -341,7 +340,7 @@ const machine = createMachine({
       throw new Error(`offset ${offset} exceeds size ${dataSize}`);
     }
 
-    // Cap the final packet to the remaining bytes
+    // Cap the final packet to the remaining bytes.
     if (offset + len >= dataSize) {
       len = dataSize - offset;
       isLast = true;
@@ -376,6 +375,10 @@ const machine = createMachine({
     transition('done', 'sendFinished'),
     resetOnError
   ),
+
+  /*
+   *  RetroNET is in another file for tidiness.
+   */
 
   ...retroNetStates
 },
