@@ -19,9 +19,30 @@ import { resetOnError, getBytes } from './common';
 
 const bytesToString = bytes => new TextDecoder().decode(new Uint8Array(bytes));
 
+// Until local files are supported, we want to hard fail anything that's not
+// a cloud URL. 'about:' seems to do the trick.
 const rnUrlFor = (ctx, fileName) =>
-  fileName.match(/^http/) ? ctx.rnProxyUrl + fileName : fileName;
+  fileName.match(/^http/) ? ctx.rnProxyUrl + fileName : 'about:';
 
+// Ensure we have downloaded the file.
+const fetchFile = async (ctx, fileName) => {
+  ctx.rn.files ??= {};
+
+  // Maybe we already have it?
+  if (ctx.rn.files[fileName]) return;
+
+  // Nope, so we need to go get it.
+  const response = await fetch(rnUrlFor(ctx, fileName));
+  if (!response.ok) {
+    throw new Error(`failed to fetch ${fileName}: ${response.status}`);
+  }
+
+  const fileData = await response.arrayBuffer();
+  const size = fileData.byteLength;
+  ctx.rn.files[fileName] = { fileData, size };
+};
+
+// These are merged into the state machine in adaptor.js.
 export const retroNetStates = {
   handleFileSizeMsg: invoke(
     async ctx => {
@@ -29,18 +50,14 @@ export const retroNetStates = {
       const fileName = bytesToString(await getBytes(ctx, len));
 
       let size = -1;
-      const response = await fetch(rnUrlFor(ctx, fileName));
-      if (response.ok) {
-        const fileData = await response.arrayBuffer();
-        ctx.rn.files ||= {};
-        ctx.rn.files[fileName] = { fileData };
-        size = fileData.byteLength;
-      }
+      try {
+        await fetchFile(ctx, fileName);
+        size = ctx.rn.files[fileName].size;
+      } catch { }
 
-      ctx.progress = {
-        fileName: fileName,
-        message: `FileSize ${baseName(fileName)}: ${size}`
-      };
+      const message = `FileSize ${baseName(fileName)}: ${size}`;
+      ctx.log(message);
+      ctx.progress = { fileName, message };
 
       const reply = new Uint8Array(4);
       new DataView(reply.buffer).setUint32(0, size, true);
@@ -58,20 +75,24 @@ export const retroNetStates = {
       let fileHandle = (await getBytes(ctx, 1))[0];
 
       const rdwr = fileFlag & 1 ? 'rw' : 'ro';
-      ctx.log(`open ${fileName} [${fileHandle}] ${rdwr}`);
+      ctx.log(`request [${fileHandle}] ${fileName}`);
 
-      ctx.rn.handles ||= [];
-      if (fileHandle === 0xff || ctx.rn.handles[fileHandle]) fileHandle = ctx.rn.handles.length;
+      ctx.rn.handles ??= [];
+      // Asked to assign a handle, or requested handle is in use.
+      if (fileHandle === 0xff || ctx.rn.handles[fileHandle]) {
+        // Find the next unused handle.
+        fileHandle = ctx.rn.handles.findIndex(e => e == undefined);
+        if (fileHandle === -1) fileHandle = ctx.rn.handles.length;
+      }
+      // Out of handles? Bad news.
       if (fileHandle >= 0xff) return ctx.writer.write(new Uint8Array([0xff]).buffer);
 
+      // All good if we made it this far.
       ctx.rn.handles[fileHandle] = { fileName, fileFlag };
 
-      ctx.log(`allocated handle ${hex(fileHandle)}`);
-
-      ctx.progress = {
-        fileName: fileName,
-        message: `Open {${fileHandle}} = ${baseName(fileName)} (${rdwr})`
-      };
+      const message = `Open {${fileHandle}} = ${baseName(fileName)} (${rdwr})`;
+      ctx.log(message);
+      ctx.progress = { fileName, message };
 
       return ctx.writer.write(new Uint8Array([fileHandle]).buffer);
     },
@@ -82,25 +103,20 @@ export const retroNetStates = {
   handleFhDetailsMsg: invoke(
     async ctx => {
       const fileHandle = (await getBytes(ctx, 1))[0];
-      const file = ctx.rn.handles[fileHandle];
-      const fileName = file.fileName;
 
-      ctx.rn.files ||= {};
+      const fh = ctx.rn.handles[fileHandle];
+      const fileName = fh.fileName;
 
-      if (!ctx.rn.files[fileName]) {
-        const response = await fetch(rnUrlFor(ctx, fileName));
-        if (!response.ok) throw new Error(response.status);
-        const fileData = await response.arrayBuffer();
-        ctx.rn.files[fileName] = { fileData };
-        file.size = fileData.byteLength;
+      try {
+        await fetchFile(ctx, fileName);
       }
-
-      const fileData = ctx.rn.files[fileName].fileData;
+      catch (err) { throw err }
+      const file = ctx.rn.files[fileName];
 
       const reply = new Uint8Array(83);
       const dv = new DataView(reply.buffer);
 
-      dv.setUint32(0, fileData.byteLength, true); // file_size
+      dv.setUint32(0, file.size, true); // file_size
 
       dv.setUint16(4, 2023, true); // year
       dv.setUint8(6, 2); // month
@@ -119,10 +135,9 @@ export const retroNetStates = {
       dv.setUint8(18, fileName.length);
       new TextEncoder().encodeInto(fileName, reply.subarray(19, 83));
 
-      ctx.progress = {
-        fileName: fileName,
-        message: `Stat ${baseName(fileName)}`
-      };
+      const message = `Stat ${baseName(fileName)}`;
+      ctx.log(message);
+      ctx.progress = { fileName, message };
 
       return ctx.writer.write(reply.buffer);
     },
@@ -134,36 +149,31 @@ export const retroNetStates = {
     async ctx => {
       const fileHandle = (await getBytes(ctx, 1))[0];
       const reqLength = new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
-      const file = ctx.rn.handles[fileHandle];
 
-      const fileName = file.fileName;
-      if (!ctx.rn.files[fileName]) {
-        const response = await fetch(rnUrlFor(ctx, fileName));
-        if (!response.ok) throw new Error(response.status);
-        const fileData = await response.arrayBuffer();
-        ctx.rn.files[fileName] = { fileData };
-        file.size = fileData.byteLength;
+      const fh = ctx.rn.handles[fileHandle];
+      const fileName = fh.fileName;
+
+      try {
+        await fetchFile(ctx, fileName);
       }
+      catch (err) { throw err }
+      const { fileData, size } = ctx.rn.files[fileName];
 
-      const fileData = ctx.rn.files[fileName].fileData;
-
-      const pos = file?.pos ?? 0;
+      const pos = fh?.pos ?? 0;
       let end = pos + reqLength;
-      if (end > fileData.byteLength) end = fileData.byteLength;
+      if (end > size) end = size;
 
-      const length = end - pos;
+      const message = `Reading ${baseName(fileName)}`;
+      ctx.log(`readseq ${baseName(fileName)} ${pos}-${end - 1}/${size}`);
+      ctx.progress = { fileName, message, total: size, complete: end };
 
-      ctx.progress = {
-        fileName, total: fileData.byteLength, complete: end,
-        message: `Reading ${baseName(fileName)}`
-      };
-
-      file.pos = end;
+      // This is a sequential read, so update the next start position.
+      fh.pos = end;
 
       const returnLength = new Uint8Array(2);
-      new DataView(returnLength.buffer).setUint16(0, length, true);
+      new DataView(returnLength.buffer).setUint16(0, end - pos, true);
       await ctx.writer.write(returnLength.buffer);
-      if (length == 0) return;
+      if (end === pos) return; // No data
       return ctx.writer.write(fileData.slice(pos, end));
     },
     transition('done', 'idle'),
@@ -175,28 +185,33 @@ export const retroNetStates = {
       const fileHandle = (await getBytes(ctx, 1))[0];
       const reqOffset = new DataView(new Uint8Array(await getBytes(ctx, 4)).buffer).getUint32(0, true);
       const reqLength = new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
-      const file = ctx.rn.handles[fileHandle];
 
-      ctx.rn.files[file.fileName] ||= { fileData: new ArrayBuffer() };
-      const fileData = ctx.rn.files[file.fileName].fileData;
+      const fh = ctx.rn.handles[fileHandle];
+      const fileName = fh.fileName;
+
+      try {
+        await fetchFile(ctx, fileName);
+      }
+      catch {
+        // Trying to read a nonexistent file is not an error in RetroNET.
+        ctx.rn.files[fileName] = { fileData: new ArrayBuffer(), size: 0 };
+      }
+      const { fileData, size } = ctx.rn.files[fileName];
 
       const pos = reqOffset;
       let end = pos + reqLength;
-      if (end > fileData.byteLength) end = fileData.byteLength;
+      if (end > size) end = size;
 
-      const length = end - pos;
+      const message = `Read ${baseName(fh.fileName)} @ ${pos}`;
+      ctx.log(`read ${baseName(fileName)} ${pos}-${end - 1}/${size}`);
+      ctx.progress = { fileName, message };
 
-      ctx.progress = {
-        fileName: file.fileName,
-        message: `Read ${baseName(file.fileName)} @ ${pos}`
-      };
-
-      ctx.rn.handles[fileHandle].pos = end;
+      fh.pos = end;
 
       const returnLength = new Uint8Array(2);
-      new DataView(returnLength.buffer).setUint16(0, length, true);
+      new DataView(returnLength.buffer).setUint16(0, end - pos, true);
       await ctx.writer.write(returnLength.buffer);
-      if (length == 0) return;
+      if (end === pos) return;
       return ctx.writer.write(fileData.slice(pos, end));
     },
     transition('done', 'idle'),
@@ -206,12 +221,12 @@ export const retroNetStates = {
   handleFhCloseMsg: invoke(
     async ctx => {
       const fileHandle = (await getBytes(ctx, 1))[0];
-      const file = ctx.rn.handles[fileHandle] ?? {};
 
-      ctx.progress = {
-        fileName: file?.fileName,
-        message: `Close {${fileHandle}} ${file?.fileName}`
-      };
+      const fh = ctx.rn.handles[fileHandle] ?? {};
+
+      const message = `Close {${fileHandle}} ${fh?.fileName}`;
+      ctx.log(message);
+      ctx.progress = { fileName: fh?.fileName, message };
 
       delete ctx.rn.handles[fileHandle];
     },

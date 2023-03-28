@@ -383,7 +383,7 @@ const machine = createMachine({
   ...retroNetStates
 },
   initialContext => ({
-    baud: 111816, log: (...a) => { console.log(...a) }, ...initialContext
+    baud: 111816, log: (...a) => { }, ...initialContext
   }));
 
 export default machine;
