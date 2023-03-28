@@ -21,21 +21,21 @@ import { resetOnError, getBytes } from './common';
 
 const bytesToString = bytes => new TextDecoder().decode(new Uint8Array(bytes));
 
-const rnUrlFor = (ctx, filename) =>
-  filename.match(/^http/) ? ctx.rnProxyUrl + filename : filename;
+const rnUrlFor = (ctx, fileName) =>
+  fileName.match(/^http/) ? ctx.rnProxyUrl + fileName : fileName;
 
 export const retroNetStates = {
   handleFileSizeMsg: invoke(
     async ctx => {
       const len = (await getBytes(ctx, 1))[0];
-      const filename = bytesToString(await getBytes(ctx, len));
+      const fileName = bytesToString(await getBytes(ctx, len));
 
       let size = -1;
-      const response = await fetch(rnUrlFor(ctx, filename));
+      const response = await fetch(rnUrlFor(ctx, fileName));
       if (response.ok) {
         const fileData = await response.arrayBuffer();
         ctx.files ||= {};
-        ctx.files[filename] = { fileData };
+        ctx.files[fileName] = { fileData };
         size = fileData.byteLength;
       }
 
@@ -50,17 +50,17 @@ export const retroNetStates = {
   handleFileOpenMsg: invoke(
     async ctx => {
       const len = (await getBytes(ctx, 1))[0];
-      const filename = bytesToString(await getBytes(ctx, len));
+      const fileName = bytesToString(await getBytes(ctx, len));
       const fileFlag = new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
       let fileHandle = (await getBytes(ctx, 1))[0];
 
-      console.log(`open ${filename} [${fileHandle}] ${fileFlag & 1 ? 'ro' : 'rw'}`);
+      console.log(`open ${fileName} [${fileHandle}] ${fileFlag & 1 ? 'ro' : 'rw'}`);
 
       ctx.handles ||= [];
       if (fileHandle === 0xff || ctx.handles[fileHandle]) fileHandle = ctx.handles.length;
       if (fileHandle >= 0xff) return ctx.writer.write(new Uint8Array([0xff]).buffer);
 
-      ctx.handles[fileHandle] = { filename, fileFlag };
+      ctx.handles[fileHandle] = { fileName, fileFlag };
 
       console.log(`allocated handle ${hex(fileHandle)}`);
 
@@ -74,18 +74,18 @@ export const retroNetStates = {
     async ctx => {
       const fileHandle = (await getBytes(ctx, 1))[0];
       const file = ctx.handles[fileHandle];
-      const filename = file.filename;
+      const fileName = file.fileName;
 
       ctx.files ||= {};
 
-      if (!ctx.files[filename]) {
-        const response = await fetch(rnUrlFor(ctx, filename));
+      if (!ctx.files[fileName]) {
+        const response = await fetch(rnUrlFor(ctx, fileName));
         if (!response.ok) throw new Error(response.status);
         const fileData = await response.arrayBuffer();
-        ctx.files[filename] = { fileData };
+        ctx.files[fileName] = { fileData };
       }
 
-      const fileData = ctx.files[filename].fileData;
+      const fileData = ctx.files[fileName].fileData;
 
       const reply = new Uint8Array(83);
       const dv = new DataView(reply.buffer);
@@ -106,8 +106,8 @@ export const retroNetStates = {
       dv.setUint8(16, 10); // minute
       dv.setUint8(17, 10); // second
 
-      dv.setUint8(18, filename.length);
-      new TextEncoder().encodeInto(filename, reply.subarray(19, 83));
+      dv.setUint8(18, fileName.length);
+      new TextEncoder().encodeInto(fileName, reply.subarray(19, 83));
 
       console.log(`file details: ${hex(reply)}`);
 
@@ -123,15 +123,15 @@ export const retroNetStates = {
       const reqLength = new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
       const file = ctx.handles[fileHandle];
 
-      const filename = file.filename;
-      if (!ctx.files[filename]) {
-        const response = await fetch(rnUrlFor(ctx, filename));
+      const fileName = file.fileName;
+      if (!ctx.files[fileName]) {
+        const response = await fetch(rnUrlFor(ctx, fileName));
         if (!response.ok) throw new Error(response.status);
         const fileData = await response.arrayBuffer();
-        ctx.files[filename] = { fileData };
+        ctx.files[fileName] = { fileData };
       }
 
-      const fileData = ctx.files[filename].fileData;
+      const fileData = ctx.files[fileName].fileData;
 
       const pos = ctx.handles[fileHandle]?.pos ?? 0;
       let end = pos + reqLength;
@@ -158,8 +158,8 @@ export const retroNetStates = {
       const reqLength = new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
       const file = ctx.handles[fileHandle];
 
-      ctx.files[file.filename] ||= { fileData: new ArrayBuffer() };
-      const fileData = ctx.files[file.filename].fileData;
+      ctx.files[file.fileName] ||= { fileData: new ArrayBuffer() };
+      const fileData = ctx.files[file.fileName].fileData;
 
       const pos = reqOffset;
       let end = pos + reqLength;
