@@ -19,10 +19,18 @@ import { resetOnError, getBytes } from './common';
 
 const bytesToString = bytes => new TextDecoder().decode(new Uint8Array(bytes));
 
+const rnUrlFor = (ctx, fileName) => {
 // Until local files are supported, we want to hard fail anything that's not
 // a cloud URL. 'about:' seems to do the trick.
-const rnUrlFor = (ctx, fileName) =>
-  fileName.match(/^http/) ? ctx.rnProxyUrl + fileName : 'about:';
+  if (!fileName.match(/^http/)) return 'about:';
+
+  // Now we have to do some double backflip escaping so these filenames
+  // make it through to the cloud server.
+  const url = new URL(fileName);
+  url.pathname = encodeURIComponent(url.pathname);
+
+  return ctx.rnProxyUrl + url;
+}
 
 // Ensure we have downloaded the file.
 const fetchFile = async (ctx, fileName) => {
