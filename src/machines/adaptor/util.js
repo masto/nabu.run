@@ -26,5 +26,6 @@ export function escapeNabuMsg(inBuf) {
 }
 
 export function baseName(path) {
+  if (path == undefined) return '';
   return path.match(/[^\/]*$/)[0];
 }
