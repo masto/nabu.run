@@ -22,75 +22,75 @@ import Home from '../routes/home';
 import Faq from '../routes/home/faq';
 
 const initConfig = () => {
-	let
-		baseUrl = '',
-		imageDir = '',
-		imageName = null,
-		channelsUrl = '/channels.json',
-		rnProxyUrl = '';
-	try { baseUrl = process.env.PREACT_APP_BASE_URL } catch { };
-	try { imageDir = process.env.PREACT_APP_IMAGE_DIR } catch { };
-	try { imageName = process.env.PREACT_APP_IMAGE_NAME } catch { };
-	try { channelsUrl = process.env.PREACT_APP_CHANNELS_URL } catch { };
-	try { rnProxyUrl = process.env.PREACT_APP_RETRONET_PROXY } catch { };
+  let
+    baseUrl = '',
+    imageDir = '',
+    imageName = null,
+    channelsUrl = '/channels.json',
+    rnProxyUrl = '';
+  try { baseUrl = process.env.PREACT_APP_BASE_URL } catch { };
+  try { imageDir = process.env.PREACT_APP_IMAGE_DIR } catch { };
+  try { imageName = process.env.PREACT_APP_IMAGE_NAME } catch { };
+  try { channelsUrl = process.env.PREACT_APP_CHANNELS_URL } catch { };
+  try { rnProxyUrl = process.env.PREACT_APP_RETRONET_PROXY } catch { };
 
-	return {
-		channelsUrl,
-		rnProxyUrl,
-		channel: { baseUrl, imageDir, imageName }
-	};
+  return {
+    channelsUrl,
+    rnProxyUrl,
+    channel: { baseUrl, imageDir, imageName }
+  };
 }
 
 // This is the only way I've been able to allow the state machine to
 // have access to live app configuration.
 const extern_config = {};
 const syncConfig = newConfig => {
-	for (let k in extern_config) delete extern_config[k];
-	Object.assign(extern_config, newConfig);
+  for (let k in extern_config) delete extern_config[k];
+  Object.assign(extern_config, newConfig);
 };
 
 const loadChannelList = async (url) => {
-	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(`fetch channels: ${response.status}`);
-	}
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`fetch channels: ${response.status}`);
+  }
 
-	const channels = await response.json();
+  const channels = await response.json();
 
-	return channels;
+  return channels;
 };
 
 
 const App = () => {
-	const [config, setConfig] = useState(initConfig());
-	useEffect(() => syncConfig(config), [config]);
+  const [config, setConfig] = useState(initConfig());
+  useEffect(() => syncConfig(config), [config]);
 
-	const adaptor = useMachine(adaptorMachine, {
-		// Use of `navigator` breaks pre-rendering, so wrap it in a guard
-		serial: typeof window !== 'undefined' ? navigator?.serial : undefined,
-		getChannel: () => extern_config.channel,
-		rnProxyUrl: config.rnProxyUrl
-	});
+  const adaptor = useMachine(adaptorMachine, {
+    // Use of `navigator` breaks pre-rendering, so wrap it in a guard
+    serial: typeof window !== 'undefined' ? navigator?.serial : undefined,
+    getChannel: () => extern_config.channel,
+    rnProxyUrl: config.rnProxyUrl
+  });
 
-	useEffect(() => {
-		if (config.channelsUrl)
-			loadChannelList(config.channelsUrl).then(list => setConfig({ ...config, channelList: list }));
-	}, []);
+  useEffect(() => {
+    if (config.channelsUrl)
+      loadChannelList(config.channelsUrl).then(list => setConfig({ ...config, channelList: list }));
+  }, []);
 
-	return (
-		<ConfigContext.Provider value={[config, setConfig]}>
-			<AdaptorContext.Provider value={adaptor}>
-				<div id="app">
-					<main>
-						<Router>
-							<Home path="/" />
-							<Faq path="/faq" />
-						</Router>
-					</main>
-				</div>
-			</AdaptorContext.Provider>
-		</ConfigContext.Provider>
-	)
+  return (
+    <ConfigContext.Provider value={[config, setConfig]}>
+      <AdaptorContext.Provider value={adaptor}>
+        <div id="app">
+          <main>
+            <Router>
+              <Home path="/" />
+              <Faq path="/faq" />
+            </Router>
+          </main>
+        </div>
+      </AdaptorContext.Provider>
+    </ConfigContext.Provider>
+  )
 };
 
 export default App;

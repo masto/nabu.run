@@ -20,153 +20,153 @@ const hex = (d, l = 2) => '0x' + Number(d).toString(16).padStart(l, '0');
 
 
 const Home = () => {
-	const [config, setConfig] = useContext(ConfigContext);
-	const adaptor = useContext(AdaptorContext);
-	const [current, send] = adaptor;
+  const [config, setConfig] = useContext(ConfigContext);
+  const adaptor = useContext(AdaptorContext);
+  const [current, send] = adaptor;
 
-	const setChannel = event => {
-		setConfig({
-			...config,
-			channel: {
-				...config.channel, ...event.target.value
-			}
-		});
-	};
+  const setChannel = event => {
+    setConfig({
+      ...config,
+      channel: {
+        ...config.channel, ...event.target.value
+      }
+    });
+  };
 
-	return (
-		<div class={style.home}>
-			<h1>
-				Hello, NABU!
-			</h1>
+  return (
+    <div class={style.home}>
+      <h1>
+        Hello, NABU!
+      </h1>
 
-			<p>
-				All you need is an RS-422 adapter and a browser that
-				supports <a href="https://wicg.github.io/serial/">WebSerial</a> (Chrome)
-				to get your NABU online. Use the button below to choose your serial port, and
-				then switch on your NABU.
-			</p>
+      <p>
+        All you need is an RS-422 adapter and a browser that
+        supports <a href="https://wicg.github.io/serial/">WebSerial</a> (Chrome)
+        to get your NABU online. Use the button below to choose your serial port, and
+        then switch on your NABU.
+      </p>
 
-			<AdaptorState current={current} />
+      <AdaptorState current={current} />
 
-			<p>
-				{current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
-				{config.channelList ?
-					<ChannelSelector
-						channel={config.channel} channelList={config.channelList} onChange={setChannel} />
-					: ""}
-			</p>
+      <p>
+        {current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
+        {config.channelList ?
+          <ChannelSelector
+            channel={config.channel} channelList={config.channelList} onChange={setChannel} />
+          : ""}
+      </p>
 
-			<p class={style.small}>
-				<a href="https://youtu.be/PoQDRdr75cA">Demo video</a>
-				, <a href="/faq">FAQ</a>
-				, <a href="https://github.com/masto/nabu.run">Code</a>
-			</p>
+      <p class={style.small}>
+        <a href="https://youtu.be/PoQDRdr75cA">Demo video</a>
+        , <a href="/faq">FAQ</a>
+        , <a href="https://github.com/masto/nabu.run">Code</a>
+      </p>
 
-			<p class={style.small} style="text-align: right">
-				Made by <a href="https://masto.me">@masto</a>
-			</p>
-		</div>
-	);
+      <p class={style.small} style="text-align: right">
+        Made by <a href="https://masto.me">@masto</a>
+      </p>
+    </div>
+  );
 };
 
 function ProgressIndicator(props) {
-	let { complete, total } = props;
-	let pct = (complete / total) * 100;
+  let { complete, total } = props;
+  let pct = (complete / total) * 100;
 
-	return (
-		<div class={style.progressBar}>
-			<div class={style.indicator} style={`width:${pct}%`}></div>
-		</div>
-	);
+  return (
+    <div class={style.progressBar}>
+      <div class={style.indicator} style={`width:${pct}%`}></div>
+    </div>
+  );
 }
 
 function OpenFileList(props) {
-	const { handles } = props;
+  const { handles } = props;
 
-	return (
-		<div class={style.openFileList}>
-			<h2>Open files</h2>
-			<ul>
-				{handles.map((fh, i) =>
-					<li>{'{' + i + '}'} {baseName(fh.fileName)}
-						{fh.fileFlag & 1 ? ' (rw)' : ' (ro)'}</li>
-				)}
-			</ul>
-		</div>
-	);
+  return (
+    <div class={style.openFileList}>
+      <h2>Open files</h2>
+      <ul>
+        {handles.map((fh, i) =>
+          <li>{'{' + i + '}'} {baseName(fh.fileName)}
+            {fh.fileFlag & 1 ? ' (rw)' : ' (ro)'}</li>
+        )}
+      </ul>
+    </div>
+  );
 }
 
 function AdaptorState(props) {
-	const { current, onChange } = props;
+  const { current, onChange } = props;
 
-	const state = current.name;
-	const port = current.context?.port;
-	const progress = current.context?.progress;
+  const state = current.name;
+  const port = current.context?.port;
+  const progress = current.context?.progress;
 
-	const hasOpenFiles = current.context?.rn?.handles?.some(e => e);
+  const hasOpenFiles = current.context?.rn?.handles?.some(e => e);
 
-	const portStatus = port ? (() => {
-		const i = port.getInfo();
-		return `vendor=${hex(i.usbVendorId, 4)} product=${hex(i.usbProductId, 4)}`;
-	})()
-		: current.context?.serial ? 'not connected' : 'WebSerial is not available';
+  const portStatus = port ? (() => {
+    const i = port.getInfo();
+    return `vendor=${hex(i.usbVendorId, 4)} product=${hex(i.usbProductId, 4)}`;
+  })()
+    : current.context?.serial ? 'not connected' : 'WebSerial is not available';
 
-	return (
-		<p>
-			<div>Adaptor state: {state}</div>
-			<div>Port: {portStatus}</div>
-			{progress ? <div class={style.progressMessage}>{progress.message}</div> : ""}
-			{progress?.complete ? <ProgressIndicator complete={progress.complete} total={progress.total} /> : ""}
-			{hasOpenFiles ? <OpenFileList handles={current.context.rn.handles} /> : ""}
-		</p>
-	);
+  return (
+    <p>
+      <div>Adaptor state: {state}</div>
+      <div>Port: {portStatus}</div>
+      {progress ? <div class={style.progressMessage}>{progress.message}</div> : ""}
+      {progress?.complete ? <ProgressIndicator complete={progress.complete} total={progress.total} /> : ""}
+      {hasOpenFiles ? <OpenFileList handles={current.context.rn.handles} /> : ""}
+    </p>
+  );
 }
 
 function SerialButton(props) {
-	const { current, send } = props;
+  const { current, send } = props;
 
-	const port = current.context?.port;
-	const isWaiting = current.name === 'waitingForPort';
+  const port = current.context?.port;
+  const isWaiting = current.name === 'waitingForPort';
 
-	const title = isWaiting ? 'Select Port' : 'Close Port';
-	const onClick = isWaiting ? () => send('request') : () => port.forget();
+  const title = isWaiting ? 'Select Port' : 'Close Port';
+  const onClick = isWaiting ? () => send('request') : () => port.forget();
 
-	return <button class={style.port} onClick={onClick}>{title}</button>;
+  return <button class={style.port} onClick={onClick}>{title}</button>;
 }
 
 const Select = ({ label, value, options, onChange }) => {
-	return (
-		<label>
-			{label}
-			<select value={value} onChange={onChange}>
-				{options.map((option) => (
-					<option value={option.value}>{option.label}</option>
-				))}
-			</select>
-		</label>
-	);
+  return (
+    <label>
+      {label}
+      <select value={value} onChange={onChange}>
+        {options.map((option) => (
+          <option value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
 };
 
 function ChannelSelector(props) {
-	const { channelList, onChange } = props;
+  const { channelList, onChange } = props;
 
-	const [value, setValue] = useState('cycle 2 raw');
+  const [value, setValue] = useState('cycle 2 raw');
 
-	const selectChannel = event => {
-		setValue(event.target.value);
-		const newChannel = channelList.find(v => v.value === event.target.value).channel;
-		onChange({ target: { value: newChannel } });
-	};
+  const selectChannel = event => {
+    setValue(event.target.value);
+    const newChannel = channelList.find(v => v.value === event.target.value).channel;
+    onChange({ target: { value: newChannel } });
+  };
 
-	return (
-		<span class={style.channel}>
-			<Select
-				label='Channel:'
-				options={channelList}
-				value={value}
-				onChange={selectChannel} />
-		</span>
-	)
+  return (
+    <span class={style.channel}>
+      <Select
+        label='Channel:'
+        options={channelList}
+        value={value}
+        onChange={selectChannel} />
+    </span>
+  )
 }
 
 export default Home;
