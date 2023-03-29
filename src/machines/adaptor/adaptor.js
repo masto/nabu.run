@@ -107,8 +107,7 @@ const machine = createMachine({
 
   // Entry. If we have no serial API, just give up.
   start: state(
-    immediate('checkingPorts', guard(ctx => ctx.serial)),
-    immediate('stopped')
+    immediate('startWebSocket')
   ),
 
   // This is a dead-end that should only be reached if there's no recovery.
@@ -187,6 +186,35 @@ const machine = createMachine({
   /*
    *  NABU connection management
    */
+
+  // Hack to create a websocket connection that looks close enough to
+  // a serial port.
+  startWebSocket: state(
+    immediate('startConnection',
+      action(ctx => {
+        const websocket = new WebSocket('ws://127.0.0.1:5818');
+        websocket.binaryType = 'arraybuffer';
+
+        const readable = new ReadableStream({
+          start: controller => {
+            websocket.onmessage = event => {
+              controller.enqueue(new Uint8Array(event.data));
+            }
+          }
+        });
+
+        const writable = new WritableStream({
+          write: async chunk => {
+            websocket.send(chunk);
+          }
+        });
+
+        ctx.port = {
+          websocket, readable, writable,
+          getInfo: () => ({ usbVendorId: 0, usbProductId: 0 })
+        };
+      }))
+  ),
 
   // (Re-)entry for starting to talk to the NABU. Should clean up any
   // internal state.
