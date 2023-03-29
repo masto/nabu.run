@@ -97,6 +97,7 @@ export const MSG_RN_FH_DETAILS = 0xb4;
 export const MSG_RN_FH_READSEQ = 0xb5;
 export const MSG_RN_FH_READ = 0xa5;
 export const MSG_RN_FH_CLOSE = 0xa7;
+export const MSG_RN_FH_SEEK = 0xb6;
 
 // Not yet implemented
 export const MSG_RN_FH_SIZE = 0xa4;
@@ -111,7 +112,10 @@ export const MSG_RN_FH_TRUNCATE = 0xb0;
 export const MSG_RN_FILE_LIST = 0xb1;
 export const MSG_RN_FILE_LIST_ITEM = 0xb2;
 export const MSG_RN_FILE_DETAILS = 0xb3;
-export const MSG_RN_FH_SEEK = 0xb6;
+
+export const RN_SEEK_SET = 1;
+export const RN_SEEK_CUR = 2;
+export const RN_SEEK_END = 3;
 
 export const unimplemented = {
    [MSG_RN_FH_SIZE]: 'MSG_RN_FH_SIZE',
@@ -125,6 +129,5 @@ export const unimplemented = {
    [MSG_RN_FH_TRUNCATE]: 'MSG_RN_FH_TRUNCATE',
    [MSG_RN_FILE_LIST]: 'MSG_RN_FILE_LIST',
    [MSG_RN_FILE_LIST_ITEM]: 'MSG_RN_FILE_LIST_ITEM',
-   [MSG_RN_FILE_DETAILS]: 'MSG_RN_FILE_DETAILS',
-   [MSG_RN_FH_SEEK]: 'MSG_RN_FH_SEEK'
+   [MSG_RN_FILE_DETAILS]: 'MSG_RN_FILE_DETAILS'
 };

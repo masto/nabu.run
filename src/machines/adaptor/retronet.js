@@ -16,12 +16,13 @@ import { transition, invoke } from 'robot3';
 import { hex, baseName } from './util';
 
 import { resetOnError, getBytes } from './common';
+import * as NABU from './constants';
 
 const bytesToString = bytes => new TextDecoder().decode(new Uint8Array(bytes));
 
 const rnUrlFor = (ctx, fileName) => {
-// Until local files are supported, we want to hard fail anything that's not
-// a cloud URL. 'about:' seems to do the trick.
+  // Until local files are supported, we want to hard fail anything that's not
+  // a cloud URL. 'about:' seems to do the trick.
   if (!fileName.match(/^http/)) return 'about:';
 
   // Now we have to do some double backflip escaping so these filenames
@@ -226,13 +227,42 @@ export const retroNetStates = {
     resetOnError
   ),
 
+  handleFhSeekMsg: invoke(
+    async ctx => {
+      const fileHandle = (await getBytes(ctx, 1))[0];
+      const offset = new DataView(new Uint8Array(await getBytes(ctx, 4)).buffer).getUint32(0, true);
+      const whence = (await getBytes(ctx, 1))[0];
+
+      const fh = ctx.rn.handles[fileHandle];
+      let pos = fh?.pos ?? 0;
+
+      switch (whence) {
+        case NABU.RN_SEEK_SET: pos = offset; break;
+        case NABU.RN_SEEK_CUR: pos += offset; break;
+        case NABU.RN_SEEK_END: pos = fh.size + offset; break;
+        default: ctx.log(`bad whence: ${whence}`);
+      }
+
+      const message = `Seek {${fileHandle}} ${offset}, ${whence}) -> ${pos}`;
+      ctx.log(message);
+      ctx.progress = { fileName: fh?.fileName, message };
+
+      fh.pos = pos;
+      const returnOffset = new Uint8Array(4);
+      new DataView(returnOffset.buffer).setUint32(0, fh.pos, true);
+      return ctx.writer.write(returnOffset.buffer);
+    },
+    transition('done', 'idle'),
+    resetOnError
+  ),
+
   handleFhCloseMsg: invoke(
     async ctx => {
       const fileHandle = (await getBytes(ctx, 1))[0];
 
       const fh = ctx.rn.handles[fileHandle] ?? {};
 
-      const message = `Close {${fileHandle}} ${fh?.fileName}`;
+      const message = `Close {${fileHandle}} ${baseName(fh?.fileName)}`;
       ctx.log(message);
       ctx.progress = { fileName: fh?.fileName, message };
 
