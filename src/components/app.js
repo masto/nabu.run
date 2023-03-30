@@ -18,6 +18,7 @@ import adaptorMachine from '/machines/adaptor';
 import { ConfigContext } from './config-context';
 import { AdaptorContext } from './adaptor-context';
 
+import Header from './header';
 import Home from '../routes/home';
 import Faq from '../routes/home/faq';
 
@@ -81,6 +82,7 @@ const App = () => {
     <ConfigContext.Provider value={[config, setConfig]}>
       <AdaptorContext.Provider value={adaptor}>
         <div id="app">
+          <Header />
           <main>
             <Router>
               <Home path="/" />

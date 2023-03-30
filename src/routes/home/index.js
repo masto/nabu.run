@@ -24,37 +24,16 @@ const Home = () => {
   const adaptor = useContext(AdaptorContext);
   const [current, send] = adaptor;
 
-  const setChannel = event => {
-    setConfig({
-      ...config,
-      channel: {
-        ...config.channel, ...event.target.value
-      }
-    });
-  };
-
   return (
     <div class={style.home}>
-      <h1>
-        Hello, NABU!
-      </h1>
-
       <p>
         All you need is an RS-422 adapter and a browser that
         supports <a href="https://wicg.github.io/serial/">WebSerial</a> (Chrome)
-        to get your NABU online. Use the button below to choose your serial port, and
+        to get your NABU online. Use the button above to choose your serial port, and
         then switch on your NABU.
       </p>
 
       <AdaptorState current={current} />
-
-      <p>
-        {current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
-        {config.channelList ?
-          <ChannelSelector
-            channel={config.channel} channelList={config.channelList} onChange={setChannel} />
-          : ""}
-      </p>
 
       <p class={style.small}>
         <a href="https://youtu.be/PoQDRdr75cA">Demo video</a>
@@ -122,51 +101,5 @@ function AdaptorState(props) {
   );
 }
 
-function SerialButton(props) {
-  const { current, send } = props;
-
-  const port = current.context?.port;
-  const isWaiting = current.name === 'waitingForPort';
-
-  const title = isWaiting ? 'Select Port' : 'Close Port';
-  const onClick = isWaiting ? () => send('request') : () => port.forget();
-
-  return <button class={style.port} onClick={onClick}>{title}</button>;
-}
-
-const Select = ({ label, value, options, onChange }) => {
-  return (
-    <label>
-      {label}
-      <select value={value} onChange={onChange}>
-        {options.map((option) => (
-          <option value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </label>
-  );
-};
-
-function ChannelSelector(props) {
-  const { channelList, onChange } = props;
-
-  const [value, setValue] = useState('cycle 2 raw');
-
-  const selectChannel = event => {
-    setValue(event.target.value);
-    const newChannel = channelList.find(v => v.value === event.target.value).channel;
-    onChange({ target: { value: newChannel } });
-  };
-
-  return (
-    <span class={style.channel}>
-      <Select
-        label='Channel:'
-        options={channelList}
-        value={value}
-        onChange={selectChannel} />
-    </span>
-  )
-}
 
 export default Home;
