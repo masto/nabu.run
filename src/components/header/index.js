@@ -34,8 +34,7 @@ const Header = () => {
   return (
     <header class={style.header}>
       <a href="/" class={style.logo}>
-        <img src="../../assets/nabu-run.svg" alt="nabu.run logo" height="64" width="64" />
-        <h1>Hello, NABU!</h1>
+        <img src="../../assets/nabu-run.svg" alt="nabu.run logo" height="64" />
       </a>
       <div class={style.controls}>
         {config.channelList ?
