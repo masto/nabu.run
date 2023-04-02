@@ -7,4 +7,7 @@ export default (config, env, helpers) => {
   if (env.isProd) {
     config.devtool = false;
   }
+
+  const { plugin } = helpers.getPluginsByName(config, 'DefinePlugin')[0];
+  plugin.definitions['process.env.VERSION'] = JSON.stringify(process.env.npm_package_version);
 }

@@ -37,8 +37,11 @@ const Home = () => {
         , <a href="https://github.com/masto/nabu.run">Code</a>
       </p>
 
-      <p class={style.small} style="text-align: right">
-        Made by <a href="https://masto.me">@masto</a>
+      <p>
+        <span class={style.small}>v{process.env.VERSION}</span>
+        <span class={style.small} style="float: right">
+          Made by <a href="https://masto.me">@masto</a>
+        </span>
       </p>
     </div>
   );
