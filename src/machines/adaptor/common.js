@@ -47,6 +47,7 @@ export const bufferUntil = async (ctx, matchFn) => {
     let { value, done } = await ctx.reader.read();
     if (done) {
       // done is like end of file, it's wildly unexpected for a serial port
+      await ctx.reader.cancel();
       throw new Error('got done while buffering');
     }
 

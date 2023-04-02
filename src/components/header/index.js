@@ -10,11 +10,41 @@ function SerialButton(props) {
 
   const port = current.context?.port;
   const isWaiting = current.name === 'waitingForPort';
+  const isOpened = current.context?.portInfo?.match(/^serial/);
 
-  const title = isWaiting ? 'Select Port' : 'Close Port';
+  const title = isOpened ? 'Close Port' : 'Connect Serial';
   const onClick = isWaiting ? () => send('requestSerial') : () => port.forget();
 
-  return <button class={style.port} onClick={onClick}>{title}</button>;
+  return (
+    <button
+      class={style.port}
+      disabled={!(isOpened || isWaiting)}
+      onClick={onClick}>
+      {title}
+    </button>
+  );
+}
+
+function WebSocketButton(props) {
+  const { current, send } = props;
+
+  const port = current.context?.port;
+  const isWaiting = current.name === 'waitingForPort';
+  const isOpened = current.context?.portInfo?.match(/^websocket/);
+
+  const title = isOpened ? 'Close Port' : 'Connect WebSocket';
+  const onClick = isWaiting ? () => send('requestSocket') : () => {
+    current.context.reader.cancel();
+  };
+
+  return (
+    <button
+      class={style.port}
+      disabled={!(isOpened || isWaiting)}
+      onClick={onClick}>
+      {title}
+    </button>
+  );
 }
 
 const Header = () => {
@@ -41,7 +71,10 @@ const Header = () => {
           <ChannelSelector
             channel={config.channel} channelList={config.channelList} onChange={setChannel} />
           : ""}
-        {current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
+        <div class={style.ports}>
+          {current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
+          {current.context?.serial ? <WebSocketButton current={current} send={send} /> : ""}
+        </div>
       </div>
     </header>
   );

@@ -21,6 +21,7 @@ import {
 import { fatalError } from './common';
 
 import { serialStates } from './serial';
+import { webSocketStates } from './websocket';
 import protocolMachine from './protocol';
 
 const machine = createMachine({
@@ -44,7 +45,8 @@ const machine = createMachine({
   // Pause here because WebSerial access needs to be user-initiated.
   // Somewhere an onClick should trigger the `request` transition.
   waitingForPort: state(
-    transition('requestSerial', 'requestingSerialPort')
+    transition('requestSerial', 'requestingSerialPort'),
+    transition('requestSocket', 'requestingWsPort')
   ),
 
   startConnection: invoke(protocolMachine,
@@ -60,11 +62,13 @@ const machine = createMachine({
       delete ctx.progress;
       delete ctx.rn;
       delete ctx.portInfo;
+      delete ctx.port;
       ctx.log('port was closed');
     }))
   ),
 
-  ...serialStates
+  ...serialStates,
+  ...webSocketStates
 },
   initialContext => ({
     baud: 111816, log: (...a) => { }, ...initialContext

@@ -103,7 +103,10 @@ const machine = createMachine({
    *  Entry and exit points 
    */
 
-  start: state(immediate('startConnection')),
+  start: state(
+    immediate('startConnection',
+      action(ctx => ctx.log(`starting protocol machine on ${ctx.portInfo}`)))
+  ),
 
   // This is a dead-end that should only be reached if there's no recovery.
   stopped: final(),
@@ -127,6 +130,14 @@ const machine = createMachine({
       guard(ctx => ctx.port.readable && ctx.port.writable),
       action(ctx => {
         ctx.reader = ctx.port.readable.getReader();
+        ctx.reader.closed
+          .then(() => {
+            ctx.log('reader closed');
+            delete ctx.port.readable;
+          })
+          .catch(reason => {
+            ctx.log('ignoring reader error');
+          });
         ctx.writer = ctx.port.writable.getWriter();
         ctx.readBuffer = [];
         ctx.rn = {}; // RetroNET context
