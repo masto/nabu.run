@@ -12,7 +12,7 @@
 
 import { useContext, useState } from 'preact/hooks';
 import { AdaptorContext } from '../../components/adaptor-context';
-import { baseName, hex } from '../../machines/adaptor/util';
+import { baseName } from '../../machines/adaptor/util';
 import style from './style.css';
 
 
@@ -76,20 +76,15 @@ function AdaptorState(props) {
 
   const state = current.name;
   const port = current.context?.port;
+  const portInfo = current.context?.portInfo;
   const progress = current.context?.progress;
 
   const hasOpenFiles = current.context?.rn?.handles?.some(e => e);
 
-  const portStatus = port ? (() => {
-    const i = port.getInfo();
-    return `vendor=${hex(i.usbVendorId, 4)} product=${hex(i.usbProductId, 4)}`;
-  })()
-    : current.context?.serial ? 'not connected' : 'WebSerial is not available';
-
   return (
     <p>
       <div>Adaptor state: {state}</div>
-      <div>Port: {portStatus}</div>
+      <div>Port: {portInfo ?? 'not connected'}</div>
       {progress ? <div class={style.progressMessage}>{progress.message}</div> : ""}
       {progress?.complete ? <ProgressIndicator complete={progress.complete} total={progress.total} /> : ""}
       {hasOpenFiles ? <OpenFileList handles={current.context.rn.handles} /> : ""}

@@ -59,6 +59,7 @@ const machine = createMachine({
     immediate('start', action(ctx => {
       delete ctx.progress;
       delete ctx.rn;
+      delete ctx.portInfo;
       ctx.log('port was closed');
     }))
   ),

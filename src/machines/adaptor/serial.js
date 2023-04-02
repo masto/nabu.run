@@ -17,6 +17,7 @@ import {
 } from 'robot3';
 
 import { fatalError } from './common';
+import { hex } from './util';
 
 export const serialStates = {
   // Get the list of ports we have access to.
@@ -57,7 +58,10 @@ export const serialStates = {
   openingPort: invoke(ctx => ctx.port.open({
     baudRate: ctx.baud, dataBits: 8, stopBits: 2, parity: 'none'
   }),
-    transition('done', 'startConnection'),
+    transition('done', 'startConnection', action(ctx => {
+      const i = ctx.port.getInfo();
+      ctx.portInfo = `serial(${hex(i.usbVendorId, 4)}, ${hex(i.usbProductId, 4)})`;
+    })),
     fatalError
   )
 };
