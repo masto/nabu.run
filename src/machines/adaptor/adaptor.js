@@ -41,6 +41,12 @@ const machine = createMachine({
     })
   )),
 
+  // Pause here because WebSerial access needs to be user-initiated.
+  // Somewhere an onClick should trigger the `request` transition.
+  waitingForPort: state(
+    transition('requestSerial', 'requestingSerialPort')
+  ),
+
   startConnection: invoke(protocolMachine,
     transition('done', 'error', guard(ctx => ctx.error)),
     transition('done', 'closed'),

@@ -12,7 +12,7 @@ function SerialButton(props) {
   const isWaiting = current.name === 'waitingForPort';
 
   const title = isWaiting ? 'Select Port' : 'Close Port';
-  const onClick = isWaiting ? () => send('request') : () => port.forget();
+  const onClick = isWaiting ? () => send('requestSerial') : () => port.forget();
 
   return <button class={style.port} onClick={onClick}>{title}</button>;
 }

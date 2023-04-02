@@ -43,14 +43,8 @@ export const serialStates = {
     )
   ),
 
-  // Pause here because WebSerial access needs to be user-initiated.
-  // Somewhere an onClick should trigger the `request` transition.
-  waitingForPort: state(
-    transition('request', 'requestingPort')
-  ),
-
   // Ask the user for access to a serial port.
-  requestingPort: invoke(ctx => ctx.serial.requestPort(),
+  requestingSerialPort: invoke(ctx => ctx.serial.requestPort(),
     transition('done', 'openingPort',
       reduce((ctx, ev) => {
         ctx.log(ev);
