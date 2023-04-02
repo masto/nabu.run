@@ -15,6 +15,7 @@ import { useState, useEffect } from 'preact/hooks';
 import { useMachine } from 'preact-robot';
 
 import adaptorMachine from '/machines/adaptor';
+import serialMachine from '/machines/adaptor/serial';
 import { ConfigContext } from './config-context';
 import { AdaptorContext } from './adaptor-context';
 
@@ -66,7 +67,7 @@ const App = () => {
   const [config, setConfig] = useState(initConfig());
   useEffect(() => syncConfig(config), [config]);
 
-  const adaptor = useMachine(adaptorMachine, {
+  const adaptor = useMachine(serialMachine, {
     // Use of `navigator` breaks pre-rendering, so wrap it in a guard
     serial: typeof window !== 'undefined' ? navigator?.serial : undefined,
     getChannel: () => extern_config.channel,
