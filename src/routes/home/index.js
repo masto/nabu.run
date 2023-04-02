@@ -12,15 +12,11 @@
 
 import { useContext, useState } from 'preact/hooks';
 import { AdaptorContext } from '../../components/adaptor-context';
-import { ConfigContext } from '../../components/config-context';
-import { baseName } from '../../machines/adaptor/util';
+import { baseName, hex } from '../../machines/adaptor/util';
 import style from './style.css';
-
-const hex = (d, l = 2) => '0x' + Number(d).toString(16).padStart(l, '0');
 
 
 const Home = () => {
-  const [config, setConfig] = useContext(ConfigContext);
   const adaptor = useContext(AdaptorContext);
   const [current, send] = adaptor;
 

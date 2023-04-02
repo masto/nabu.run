@@ -2,7 +2,7 @@ import { Link } from 'preact-router/match';
 import style from './style.css';
 
 import { useContext, useState } from 'preact/hooks';
-import { AdaptorContext } from '../../components/adaptor-context';
+import { AdaptorContext } from '../adaptor-context';
 import { ConfigContext } from '../../components/config-context';
 
 function SerialButton(props) {
