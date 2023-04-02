@@ -10,9 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This is a slightly gnarly state machine that runs the show. Future work
-// is to separate the parts that concern managing the serial port from
-// the parts that implement the NABU protocol.
+// This is a slightly gnarly state machine that runs the show once a port
+// has been established.
 
 import {
   createMachine, state, transition, invoke, immediate, reduce, action,
@@ -27,8 +26,6 @@ import {
 } from './common';
 import { retroNetStates } from './retronet';
 import * as NABU from './constants';
-
-// The state machine is defined after a few convenience functions.
 
 // Fill in the 16-byte packet header.
 const setHeader = (buf, imageId, segment, offset, isLast) => {
@@ -100,7 +97,7 @@ const processMessages = invoke(
   resetOnError
 );
 
-// Now after all that prep work, the state machine definition:
+// Here's the robot3 state machine definition.
 const machine = createMachine({
   /*
    *  Entry and exit points 
