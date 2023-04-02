@@ -70,7 +70,9 @@ const App = () => {
     // Use of `navigator` breaks pre-rendering, so wrap it in a guard
     serial: typeof window !== 'undefined' ? navigator?.serial : undefined,
     getChannel: () => extern_config.channel,
-    rnProxyUrl: config.rnProxyUrl
+    rnProxyUrl: config.rnProxyUrl,
+    ...(process.env.NODE_ENV === 'development' ?
+      { log: (...a) => console.log(...a) } : {})
   });
 
   useEffect(() => {
