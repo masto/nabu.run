@@ -5,6 +5,8 @@ import { useContext, useState } from 'preact/hooks';
 import { AdaptorContext } from '../adaptor-context';
 import { ConfigContext } from '../../components/config-context';
 
+import { WebSocketDialog } from './websocket-dialog';
+
 function SerialButton(props) {
   const { current, send } = props;
 
@@ -26,14 +28,13 @@ function SerialButton(props) {
 }
 
 function WebSocketButton(props) {
-  const { current, send } = props;
+  const { current, onClick } = props;
 
-  const port = current.context?.port;
   const isWaiting = current.name === 'waitingForPort';
   const isOpened = current.context?.portInfo?.match(/^websocket/);
 
   const title = isOpened ? 'Close Port' : 'Connect WebSocket';
-  const onClick = isWaiting ? () => send('requestSocket') : () => {
+  const handleClick = isWaiting ? () => onClick() : () => {
     current.context.reader.cancel();
   };
 
@@ -41,7 +42,7 @@ function WebSocketButton(props) {
     <button
       class={style.port}
       disabled={!(isOpened || isWaiting)}
-      onClick={onClick}>
+      onClick={handleClick}>
       {title}
     </button>
   );
@@ -61,6 +62,18 @@ const Header = () => {
     });
   };
 
+  const [wsDialogOpen, setWsDialogOpen] = useState(false);
+  const [wsUrl, setWsUrl] = useState('ws://127.0.0.1:5818');
+
+  const handleConnect = (event, value) => {
+    setWsUrl(value);
+    setWsDialogOpen(false);
+    send({ type: 'requestSocket', value: value });
+    event.preventDefault();
+  };
+
+  const onClickWsButton = () => setWsDialogOpen(true);
+
   return (
     <header class={style.header}>
       <a href="/" class={style.logo}>
@@ -73,9 +86,11 @@ const Header = () => {
           : ""}
         <div class={style.ports}>
           {current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
-          {current.context?.serial ? <WebSocketButton current={current} send={send} /> : ""}
+          {current.context?.serial ? <WebSocketButton current={current} onClick={onClickWsButton} /> : ""}
         </div>
       </div>
+      <WebSocketDialog open={wsDialogOpen} value={wsUrl}
+        onConnect={handleConnect} onCancel={() => setWsDialogOpen(false)} />
     </header>
   );
 };

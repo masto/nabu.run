@@ -26,7 +26,7 @@ export const webSocketStates = {
 
   // Now we have a port, so open it.
   openingWsPort: invoke(ctx => new Promise((resolve, reject) => {
-    const websocket = new WebSocket('ws://127.0.0.1:5818');
+    const websocket = new WebSocket(ctx.wsUrl);
     websocket.binaryType = 'arraybuffer';
 
     const errorController = new AbortController();
@@ -87,6 +87,7 @@ export const webSocketStates = {
       }
       else {
         console.log('websocket connection error\n', ev.error);
+        alert(ev.error);
       }
     }))
   )

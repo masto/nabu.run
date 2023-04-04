@@ -46,7 +46,9 @@ const machine = createMachine({
   // Somewhere an onClick should trigger the `request` transition.
   waitingForPort: state(
     transition('requestSerial', 'requestingSerialPort'),
-    transition('requestSocket', 'requestingWsPort')
+    transition('requestSocket', 'requestingWsPort',
+      reduce((ctx, ev) => ({ ...ctx, wsUrl: ev.value }))
+    )
   ),
 
   startConnection: invoke(protocolMachine,
