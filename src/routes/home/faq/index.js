@@ -46,9 +46,9 @@ const Faq = () => {
       </h2>
       <p>
         Yes, with one extra detail: you need to run a local proxy server to
-        allow the web page and MAME to connect. See the README at
+        allow the web page and MAME to connect. See the README at {' '}
         <a href="https://github.com/masto/nabu.run#websockets">https://github.com/masto/nabu.run</a>
-        for more details on how to do this.
+        {' '} for more details on how to do this.
       </p>
 
       <h2>
