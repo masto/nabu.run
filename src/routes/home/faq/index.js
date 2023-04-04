@@ -27,8 +27,9 @@ const Faq = () => {
         What does <a href="https://nabu.run">nabu.run</a> do?
       </h2>
       <p>
-        Right now, it serves "NABU Network 1984 Cycle v2" to a NABU connected
-        to a serial port, using Chrome and WebSerial.
+        Right now, it serves a selection of NABU cycle paks and homebrew files
+        to a NABU connected to a serial port or an emulator connected to a
+        WebSocket, if you have a supported browser (Chrome).
       </p>
 
       <h2>
@@ -44,17 +45,19 @@ const Faq = () => {
         Can it support a TCP socket (e.g. for MAME)?
       </h2>
       <p>
-        Probably not. Raw TCP sockets are not currently supported in any browsers,
-        and the functionality for creating a <i>listening</i> socket is generally
-        rejected for security concerns. Chrome apps used to be able to do this, but
-        they are deprecated.
+        Yes, with one extra detail: you need to run a local proxy server to
+        allow the web page and MAME to connect. See the README at
+        <a href="https://github.com/masto/nabu.run#websockets">https://github.com/masto/nabu.run</a>
+        for more details on how to do this.
       </p>
 
       <h2>
         Can I change to a different channel/cycle/file?
       </h2>
       <p>
-        I intend to add a menu soon to allow you to select what you want to load.
+        There is a sample selection of boot options in the menu at the top of
+        the page. In a future version, it will be possible to customize the
+        choices and add your own.
       </p>
 
       <h2>
