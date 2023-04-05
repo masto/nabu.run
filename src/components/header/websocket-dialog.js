@@ -53,6 +53,10 @@ export function WebSocketDialog(props) {
           <DialogContentText>
             Please enter the WebSocket URL to connect to.
           </DialogContentText>
+          <DialogContentText style="font-size: small">
+            <a href="https://github.com/masto/nabu.run#websockets"
+              target="_blank">(more info)</a>
+          </DialogContentText>
           <MyTextField />
         </DialogContent>
         <DialogActions>
