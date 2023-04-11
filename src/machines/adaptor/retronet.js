@@ -256,6 +256,85 @@ export const retroNetStates = {
     resetOnError
   ),
 
+  handleFhLineCountMsg: invoke(
+    async ctx => {
+      const fileHandle = (await getBytes(ctx, 1))[0];
+
+      const fh = ctx.rn.handles[fileHandle];
+      const fileName = fh.fileName;
+
+      try {
+        await fetchFile(ctx, fileName);
+      }
+      catch (err) { throw err }
+      const { fileData } = ctx.rn.files[fileName];
+
+      // Just count the number of newlines
+      const lines = new Uint8Array(fileData).reduce(
+        (count, byte) => count + (byte === 0x0a), 0);
+
+      const message = `LineCount {${fileHandle}}: ${lines}`;
+      ctx.log(message);
+      ctx.progress = { fileName: fh?.fileName, message };
+
+      const returnLineCount = new Uint8Array(2);
+      new DataView(returnLineCount.buffer).setUint16(0, lines, true);
+      return ctx.writer.write(returnLineCount.buffer);
+    },
+    transition('done', 'idle'),
+    resetOnError
+  ),
+
+  handleFhGetLineMsg: invoke(
+    async ctx => {
+      const fileHandle = (await getBytes(ctx, 1))[0];
+      let lineNumber =
+        new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
+
+      const fh = ctx.rn.handles[fileHandle];
+      const fileName = fh.fileName;
+
+      try {
+        await fetchFile(ctx, fileName);
+      }
+      catch (err) { throw err }
+      const { fileData, size } = ctx.rn.files[fileName];
+
+      const message = `GetLine {${fileHandle}} ${lineNumber}`;
+      ctx.log(message);
+      ctx.progress = { fileName: fh?.fileName, message };
+
+      let byteArray = new Uint8Array(fileData);
+      let begin = 0;
+      // Skip over `lineNumber` newlines
+      while (lineNumber > 0) {
+        const index = byteArray.indexOf(0x0a, begin);
+        if (index == -1) {
+          ctx.log('GetLine ran out of lines');
+          lineNumber = 0;
+        }
+        else {
+          lineNumber--;
+          begin = index + 1;
+        }
+      }
+      // Find the end of the line we want to return
+      let end = byteArray.indexOf(0x0a, begin);
+      // Clamp to end of file
+      if (end == -1) end = size;
+      // If line ended with CR+NL, don't return the CR
+      if (byteArray[end] === 0x0d) end--;
+
+      const returnArray = byteArray.subarray(begin, end);
+      const returnLength = new Uint8Array(2);
+      new DataView(returnLength.buffer).setUint16(0, returnArray.length, true);
+      await ctx.writer.write(returnLength.buffer);
+      return ctx.writer.write(returnArray);
+    },
+    transition('done', 'idle'),
+    resetOnError
+  ),
+
   handleFhCloseMsg: invoke(
     async ctx => {
       const fileHandle = (await getBytes(ctx, 1))[0];

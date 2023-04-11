@@ -84,6 +84,8 @@ const processMessages = invoke(
   dispatch(NABU.MSG_RN_FH_READ, 'handleFhReadMsg'),
   dispatch(NABU.MSG_RN_FH_CLOSE, 'handleFhCloseMsg'),
   dispatch(NABU.MSG_RN_FH_SEEK, 'handleFhSeekMsg'),
+  dispatch(NABU.MSG_RN_FH_LINE_COUNT, 'handleFhLineCountMsg'),
+  dispatch(NABU.MSG_RN_FH_GET_LINE, 'handleFhGetLineMsg'),
 
   transition('done', 'reset', action(ctx => {
     const code = ctx.readBuffer[0];

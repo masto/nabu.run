@@ -112,6 +112,8 @@ export const MSG_RN_FH_TRUNCATE = 0xb0;
 export const MSG_RN_FILE_LIST = 0xb1;
 export const MSG_RN_FILE_LIST_ITEM = 0xb2;
 export const MSG_RN_FILE_DETAILS = 0xb3;
+export const MSG_RN_FH_LINE_COUNT = 0xdc;
+export const MSG_RN_FH_GET_LINE = 0xdd;
 
 export const RN_SEEK_SET = 1;
 export const RN_SEEK_CUR = 2;
