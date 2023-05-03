@@ -55,6 +55,38 @@ const nhacpString = string => {
   return bytes;
 };
 
+const rnUrlFor = (ctx, fileName) => {
+  // This is a temporary hack for serving files locally during development.
+  // Eventually, we want to support the local filesystem API.
+  const channel = ctx.getChannel();
+  if (!fileName.match(/^http/)) return `${channel.baseUrl}${channel.imageDir}/${fileName}`;
+
+  // Now we have to do some double backflip escaping so these filenames
+  // make it through to the cloud server.
+  const url = new URL(fileName);
+  url.pathname = encodeURIComponent(url.pathname);
+
+  return ctx.rnProxyUrl + url;
+}
+
+// Ensure we have downloaded the file.
+const fetchFile = async (ctx, url) => {
+  ctx.nhacp.files ??= {};
+
+  // Maybe we already have it?
+  if (ctx.nhacp.files[url]) return;
+
+  // Nope, so we need to go get it.
+  const response = await fetch(rnUrlFor(ctx, url));
+  if (!response.ok) {
+    throw new Error(`failed to fetch ${url}: ${response.status}`);
+  }
+
+  const fileData = await response.arrayBuffer();
+  const size = fileData.byteLength;
+  ctx.nhacp.files[url] = { fileData, size };
+};
+
 // These are merged into the state machine in protocol.js.
 export const nhacpStates = {
   handleNhacpRequest: invoke(
@@ -90,6 +122,9 @@ export const nhacpStates = {
       ctx.nhacp.message = message;
     },
     dispatch(NABU.NHACP_REQUEST_HELLO, 'handleNhacpHello'),
+    dispatch(NABU.NHACP_REQUEST_STORAGE_OPEN, 'handleNhacpStorageOpen'),
+    dispatch(NABU.NHACP_REQUEST_STORAGE_GET_BLOCK, 'handleNhacpStorageGetBlock'),
+    dispatch(NABU.NHACP_REQUEST_FILE_CLOSE, 'handleNhacpFileClose'),
     transition('done', 'reset', action(ctx => {
       ctx.log(`Unhandled NHACP message type ${ctx.nhacp.message?.type}`);
     })),
@@ -135,6 +170,120 @@ export const nhacpStates = {
     },
     transition('done', 'idle'),
     resetOnError
-  )
+  ),
 
+  handleNhacpStorageOpen: invoke(
+    async ctx => {
+      const message = ctx.nhacp.message;
+      const request = {
+        ...decodeStruct(new Map([
+          ['fd', 'u8'],
+          ['flags', 'u16']
+        ]), message.contents),
+        url: getNhacpString(message.contents.slice(3))
+      };
+
+      ctx.nhacp.handles ??= [];
+      let fd = request.fd;
+      // Asked to assign a handle
+      if (fd === 0xff) {
+        // Find the next unused handle.
+        fd = ctx.nhacp.handles.findIndex(e => e == undefined);
+        if (fd === -1) fd = ctx.nhacp.handles.length;
+      }
+      // Out of handles? Bad news.
+      if (fd >= 0xff || ctx.nhacp.handles[fd]) {
+        // TODO: Proper error handling
+        throw new Error(`Unable to assign requested fdesc ${request.fd}`);
+      }
+
+      // All good if we made it this far.
+      ctx.nhacp.handles[fd] = { url: request.url, flags: request.flags };
+
+      const status = `Open {${fd}} = ${baseName(request.url)} (${request.flags})`;
+      ctx.log(status);
+      ctx.progress = { fileName: request.url, message: status };
+
+      // Get the file
+      try {
+        await fetchFile(ctx, request.url);
+      }
+      catch (err) { throw err }
+      // TODO: Proper error handling
+      const file = ctx.nhacp.files[request.url];
+
+      const response = new Uint8Array(5);
+      const dv = new DataView(response.buffer);
+
+      dv.setUint8(0, fd); // fdesc
+      dv.setUint32(1, file.size, true); // length
+
+      return ctx.writer.write(responseFrame(NABU.NHACP_RESPONSE_STORAGE_LOADED, response).buffer);
+    },
+    transition('done', 'idle'),
+    resetOnError
+  ),
+
+  handleNhacpStorageGetBlock: invoke(
+    async ctx => {
+      const message = ctx.nhacp.message;
+      const request = decodeStruct(new Map([
+        ['fd', 'u8'],
+        ['blockNumber', 'u32'],
+        ['blockLength', 'u16']
+      ]), message.contents);
+
+      const fh = ctx.nhacp.handles[request.fd];
+      const url = fh.url;
+
+      const { fileData, size } = ctx.nhacp.files[url];
+
+      const pos = request.blockNumber * request.blockLength;
+      let end = pos + request.blockLength;
+      if (end > size) end = size;
+
+      const status = `Read ${baseName(url)} @ ${pos}`;
+      ctx.log(`read ${baseName(url)} ${pos}-${end - 1}/${size}`);
+      ctx.progress = { fileName: url, message: status };
+
+      const have = pos < size ? request.blockLength : 0;
+
+      const response = new Uint8Array(2 + have);
+      const dv = new DataView(response.buffer);
+
+      dv.setUint16(0, have, true); // length
+      if (have) {
+        response.set(new Uint8Array(fileData.slice(pos, end)), 2); // data
+      }
+
+      const r = responseFrame(NABU.NHACP_RESPONSE_DATA_BUFFER, response);
+      return ctx.writer.write(r.buffer);
+    },
+    transition('done', 'idle'),
+    resetOnError
+  ),
+
+  handleNhacpFileClose: invoke(
+    async ctx => {
+      const message = ctx.nhacp.message;
+      const request = decodeStruct(new Map([
+        ['fd', 'u8']
+      ]), message.contents);
+
+      try {
+        const fh = ctx.nhacp.handles[request.fd];
+        const url = fh.url;
+
+        delete ctx.nhacp.files[url];
+        delete ctx.nhacp.handles[request.fd];
+
+        const status = `Close {${request.fd}} ${baseName(url)}`;
+        ctx.log(status);
+        ctx.progress = { fileName: url, message: status };
+      }
+      catch { }
+    },
+    transition('done', 'idle'),
+    resetOnError
+  )
 };

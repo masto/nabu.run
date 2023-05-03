@@ -123,7 +123,12 @@ export const RN_SEEK_END = 3;
 
 export const MSG_NHACP_REQUEST = 0x8f;
 export const NHACP_REQUEST_HELLO = 0x00;
+export const NHACP_REQUEST_STORAGE_OPEN = 0x01;
+export const NHACP_REQUEST_FILE_CLOSE = 0x05;
+export const NHACP_REQUEST_STORAGE_GET_BLOCK = 0x07;
 export const NHACP_RESPONSE_SESSION_STARTED = 0x80;
+export const NHACP_RESPONSE_STORAGE_LOADED = 0x83;
+export const NHACP_RESPONSE_DATA_BUFFER = 0x84;
 
 
 export const unimplemented = {

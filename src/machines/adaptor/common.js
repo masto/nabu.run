@@ -105,6 +105,12 @@ const nabuTypes = {
     decode: bytes =>
       new DataView(new Uint8Array(bytes).buffer).getUint16(0, true),
   },
+  u32: {
+    length: () => 4,
+    get: async ctx => await getBytes(ctx, 4),
+    decode: (bytes) =>
+      new DataView(new Uint8Array(bytes).buffer).getUint32(0, true),
+  },
 };
 
 // Unpack a single value of `type`
