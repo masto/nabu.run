@@ -25,6 +25,7 @@ import {
   expectToReceive
 } from './common';
 import { retroNetStates } from './retronet';
+import { nhacpStates } from './nhacp';
 import * as NABU from './constants';
 
 // Fill in the 16-byte packet header.
@@ -87,6 +88,9 @@ const processMessages = invoke(
   dispatch(NABU.MSG_RN_FH_LINE_COUNT, 'handleFhLineCountMsg'),
   dispatch(NABU.MSG_RN_FH_GET_LINE, 'handleFhGetLineMsg'),
 
+  // NHACP
+  dispatch(NABU.MSG_NHACP_REQUEST, 'handleNhacpRequest'),
+
   transition('done', 'reset', action(ctx => {
     const code = ctx.readBuffer[0];
     const msg = NABU.unimplemented[code];
@@ -143,6 +147,7 @@ const machine = createMachine({
         ctx.writer = ctx.port.writable.getWriter();
         ctx.readBuffer = [];
         ctx.rn = {}; // RetroNET context
+        ctx.nhacp = {}; // NHACP context
         delete ctx.image;
         delete ctx.progress;
       })
@@ -331,10 +336,11 @@ const machine = createMachine({
   ),
 
   /*
-   *  RetroNET is in another file for tidiness.
+   *  Protocol extensions are in separate files for tidiness.
    */
 
-  ...retroNetStates
+  ...retroNetStates,
+  ...nhacpStates
 },
   initialContext => ({
     log: (...a) => { }, ...initialContext

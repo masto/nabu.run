@@ -29,3 +29,7 @@ export function baseName(path) {
   if (path == undefined) return '';
   return path.match(/[^\/]*$/)[0];
 }
+
+export function bytesToString(bytes) {
+  return new TextDecoder().decode(new Uint8Array(bytes));
+}

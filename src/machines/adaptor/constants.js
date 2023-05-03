@@ -119,6 +119,13 @@ export const RN_SEEK_SET = 1;
 export const RN_SEEK_CUR = 2;
 export const RN_SEEK_END = 3;
 
+// NHACP
+
+export const MSG_NHACP_REQUEST = 0x8f;
+export const NHACP_REQUEST_HELLO = 0x00;
+export const NHACP_RESPONSE_SESSION_STARTED = 0x80;
+
+
 export const unimplemented = {
    [MSG_RN_FH_SIZE]: 'MSG_RN_FH_SIZE',
    [MSG_RN_FH_APPEND]: 'MSG_RN_FH_APPEND',
@@ -131,5 +138,5 @@ export const unimplemented = {
    [MSG_RN_FH_TRUNCATE]: 'MSG_RN_FH_TRUNCATE',
    [MSG_RN_FILE_LIST]: 'MSG_RN_FILE_LIST',
    [MSG_RN_FILE_LIST_ITEM]: 'MSG_RN_FILE_LIST_ITEM',
-   [MSG_RN_FILE_DETAILS]: 'MSG_RN_FILE_DETAILS'
+   [MSG_RN_FILE_DETAILS]: 'MSG_RN_FILE_DETAILS',
 };

@@ -91,3 +91,48 @@ export const expectToReceive = (expectValue, nextState) => invoke(
   transition('done', nextState),
   resetOnError
 );
+
+// These are for doing stuff with packed binary data and structures.
+const nabuTypes = {
+  u8: {
+    length: () => 1,
+    get: async ctx => await getBytes(ctx, 1),
+    decode: bytes => bytes[0],
+  },
+  u16: {
+    length: () => 2,
+    get: async ctx => await getBytes(ctx, 2),
+    decode: bytes =>
+      new DataView(new Uint8Array(bytes).buffer).getUint16(0, true),
+  },
+};
+
+// Unpack a single value of `type`
+export const decodeType = (type, value) => nabuTypes[type].decode(value);
+
+// Unpack a sequence of typed fields
+export const decodeStruct = (fields, bytes) => {
+  let struct = {};
+  let i = 0;
+  for (const [field, type] of fields) {
+    const length = nabuTypes[type].length();
+    struct[field] = decodeType(type, bytes.slice(i, i + length + 1));
+    i += length;
+  }
+
+  return struct;
+};
+
+// Read and unpack a single value of `type`
+export const getType = async (ctx, type) =>
+  decodeType(type, await nabuTypes[type].get(ctx));
+
+// Read and unpack a sequence of typed fields
+export const getStruct = async (ctx, fields) => {
+  let struct = {};
+  for (const [field, type] of fields) {
+    struct[field] = await getType(ctx, type);
+  }
+
+  return struct;
+};

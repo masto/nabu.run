@@ -13,12 +13,10 @@
 // Handlers for the RetroNET protocol
 
 import { transition, invoke } from 'robot3';
-import { hex, baseName } from './util';
+import { hex, baseName, bytesToString } from './util';
 
 import { resetOnError, getBytes } from './common';
 import * as NABU from './constants';
-
-const bytesToString = bytes => new TextDecoder().decode(new Uint8Array(bytes));
 
 const rnUrlFor = (ctx, fileName) => {
   // Until local files are supported, we want to hard fail anything that's not
@@ -51,7 +49,7 @@ const fetchFile = async (ctx, fileName) => {
   ctx.rn.files[fileName] = { fileData, size };
 };
 
-// These are merged into the state machine in adaptor.js.
+// These are merged into the state machine in protocol.js.
 export const retroNetStates = {
   handleFileSizeMsg: invoke(
     async ctx => {
