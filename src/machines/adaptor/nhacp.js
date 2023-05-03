@@ -41,6 +41,20 @@ const responseFrame = (type, contents) => {
   return response;
 };
 
+const getNhacpString = bytes => {
+  const length = bytes.shift();
+  const string = bytesToString(bytes.slice(0, length));
+  return string.replace(/\x00.*$/, '');
+};
+
+const nhacpString = string => {
+  const bytes = new Uint8Array(string.length + 1);
+  const dv = new DataView(bytes.buffer);
+  dv.setUint8(0, string.length);
+  bytes.set(string, 1);
+  return bytes;
+};
+
 // These are merged into the state machine in protocol.js.
 export const nhacpStates = {
   handleNhacpRequest: invoke(
@@ -98,7 +112,7 @@ export const nhacpStates = {
         throw new Error(`HELLO: Bad magic (${hello.magic})`);
       }
 
-      const adapterId = 'nabu.run';
+      const adapterId = nhacpString('nabu.run');
       const response = new Uint8Array(3 + adapterId.length);
       const dv = new DataView(response.buffer);
 
