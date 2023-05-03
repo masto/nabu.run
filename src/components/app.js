@@ -37,6 +37,7 @@ const initConfig = () => {
 
   return {
     channelsUrl,
+    baseUrl,
     rnProxyUrl,
     channel: { baseUrl, imageDir, imageName }
   };

@@ -57,7 +57,7 @@ const Header = () => {
     setConfig({
       ...config,
       channel: {
-        ...config.channel, ...event.target.value
+        ...config.channel, baseUrl: config.baseUrl, ...event.target.value
       }
     });
   };
