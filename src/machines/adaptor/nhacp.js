@@ -13,11 +13,20 @@
 // Handlers for the NHACP protocol
 // Docs: https://github.com/thorpej/nabu-figforth/blob/dev/nhacp-draft-0.1/nabu-comms.md
 
-import { transition, invoke, action, guard } from 'robot3';
+import { state, immediate, transition, invoke, action, reduce, guard } from 'robot3';
 import { hex, baseName, bytesToString } from './util';
 
 import { resetOnError, getBytes, decodeType, decodeStruct } from './common';
 import * as NABU from './constants';
+
+// Custom errors that are returned to the client instead of resetting
+class NhacpError extends Error {
+  constructor(code, message) {
+    super(message ?? `NHACP Error Code ${code}`);
+    this.name = 'NhacpError';
+    this.code = code;
+  }
+}
 
 // See dispatch function in protocol.js for the idea behind this.
 const dispatch = (type, nextState) => transition('done', nextState,
@@ -27,6 +36,10 @@ const dispatch = (type, nextState) => transition('done', nextState,
       return true;
     }
   })
+);
+
+const errorHandler = transition('error', 'nhacpError',
+  reduce((ctx, ev) => ({ ...ctx, error: ev.error }))
 );
 
 const responseFrame = (type, contents) => {
@@ -39,6 +52,17 @@ const responseFrame = (type, contents) => {
   response.set(contents, 3);
 
   return response;
+};
+
+const errorFrame = (code, message) => {
+  const messageString = nhacpString(message ?? '');
+  const response = new Uint8Array(2 + messageString.length);
+  const dv = new DataView(response.buffer);
+
+  dv.setUint16(0, code, true);
+  response.set(messageString, 2);
+
+  return responseFrame(NABU.NHACP_RESPONSE_ERROR, response);
 };
 
 const getNhacpString = bytes => {
@@ -79,7 +103,10 @@ const fetchFile = async (ctx, url) => {
   // Nope, so we need to go get it.
   const response = await fetch(rnUrlFor(ctx, url));
   if (!response.ok) {
-    throw new Error(`failed to fetch ${url}: ${response.status}`);
+    throw new NhacpError(
+      NABU.NHACP_ERROR_ENOENT,
+      `failed to fetch ${url}: ${response.status}`
+    );
   }
 
   const fileData = await response.arrayBuffer();
@@ -131,6 +158,24 @@ export const nhacpStates = {
     resetOnError
   ),
 
+  // Pass NHACP-specific errors to special handling, otherwise reset
+  nhacpError: state(
+    immediate('handleNhacpError', guard(ctx => ctx.error instanceof NhacpError)),
+    immediate('reset', action(ctx => {
+      console.log(ctx.error);
+    }))
+  ),
+
+  handleNhacpError: invoke(
+    async ctx => {
+      ctx.log(ctx.error);
+
+      return ctx.writer.write(errorFrame(ctx.error.code));
+    },
+    transition('done', 'idle'),
+    resetOnError
+  ),
+
   handleNhacpHello: invoke(
     async ctx => {
       const message = ctx.nhacp.message;
@@ -159,8 +204,10 @@ export const nhacpStates = {
         dv.setUint8(0, 1); // session-id
       }
       else {
-        // TODO: proper error handling
-        throw new Error(`Invalid requested session ID ${message.sessionId}`);
+        throw new NhacpError(
+          NABU.NHACP_ERROR_ENSESS,
+          `Invalid requested session ID ${message.sessionId}`
+        );
       }
 
       dv.setUint16(1, 1, true); // version
@@ -169,7 +216,7 @@ export const nhacpStates = {
       return ctx.writer.write(responseFrame(NABU.NHACP_RESPONSE_SESSION_STARTED, response).buffer);
     },
     transition('done', 'idle'),
-    resetOnError
+    errorHandler
   ),
 
   handleNhacpStorageOpen: invoke(
@@ -193,12 +240,11 @@ export const nhacpStates = {
       }
       // Out of handles? Bad news.
       if (fd >= 0xff || ctx.nhacp.handles[fd]) {
-        // TODO: Proper error handling
-        throw new Error(`Unable to assign requested fdesc ${request.fd}`);
+        throw new NhacpError(
+          NABU.NHACP_ERROR_EBUSY,
+          `Unable to assign requested fdesc ${request.fd}`
+        );
       }
-
-      // All good if we made it this far.
-      ctx.nhacp.handles[fd] = { url: request.url, flags: request.flags };
 
       const status = `Open {${fd}} = ${baseName(request.url)} (${request.flags})`;
       ctx.log(status);
@@ -209,7 +255,9 @@ export const nhacpStates = {
         await fetchFile(ctx, request.url);
       }
       catch (err) { throw err }
-      // TODO: Proper error handling
+
+      // All good if we made it this far.
+      ctx.nhacp.handles[fd] = { url: request.url, flags: request.flags };
       const file = ctx.nhacp.files[request.url];
 
       const response = new Uint8Array(5);
@@ -221,7 +269,7 @@ export const nhacpStates = {
       return ctx.writer.write(responseFrame(NABU.NHACP_RESPONSE_STORAGE_LOADED, response).buffer);
     },
     transition('done', 'idle'),
-    resetOnError
+    errorHandler
   ),
 
   handleNhacpStorageGetBlock: invoke(
@@ -233,9 +281,17 @@ export const nhacpStates = {
         ['blockLength', 'u16']
       ]), message.contents);
 
-      const fh = ctx.nhacp.handles[request.fd];
-      const url = fh.url;
+      ctx.log(`requested fd ${request.fd}`);
 
+      const fh = ctx.nhacp?.handles?.[request.fd];
+      if (fh == undefined) {
+        throw new NhacpError(
+          NABU.NHACP_ERROR_EBADF,
+          `fdesc ${request.fd} is not open`
+        );
+      }
+
+      const url = fh.url;
       const { fileData, size } = ctx.nhacp.files[url];
 
       const pos = request.blockNumber * request.blockLength;
@@ -260,7 +316,7 @@ export const nhacpStates = {
       return ctx.writer.write(r.buffer);
     },
     transition('done', 'idle'),
-    resetOnError
+    errorHandler
   ),
 
   handleNhacpFileClose: invoke(
@@ -284,6 +340,6 @@ export const nhacpStates = {
       catch { }
     },
     transition('done', 'idle'),
-    resetOnError
+    errorHandler
   )
 };

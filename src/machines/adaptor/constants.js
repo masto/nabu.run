@@ -127,9 +127,33 @@ export const NHACP_REQUEST_STORAGE_OPEN = 0x01;
 export const NHACP_REQUEST_FILE_CLOSE = 0x05;
 export const NHACP_REQUEST_STORAGE_GET_BLOCK = 0x07;
 export const NHACP_RESPONSE_SESSION_STARTED = 0x80;
+export const NHACP_RESPONSE_OK = 0x81;
+export const NHACP_RESPONSE_ERROR = 0x82;
 export const NHACP_RESPONSE_STORAGE_LOADED = 0x83;
 export const NHACP_RESPONSE_DATA_BUFFER = 0x84;
 
+export const NHACP_ERROR_UNDEFINED = 0; // undefined generic error
+export const NHACP_ERROR_ENOTSUP = 1; // Operation is not supported
+export const NHACP_ERROR_EPERM = 2; // Operation is not permitted
+export const NHACP_ERROR_ENOENT = 3; // Requested file does not exist
+export const NHACP_ERROR_EIO = 4; // Input / output error
+export const NHACP_ERROR_EBADF = 5; // Bad file descriptor
+export const NHACP_ERROR_ENOMEM = 6; // Out of memory
+export const NHACP_ERROR_EACCES = 7; // Access denied
+export const NHACP_ERROR_EBUSY = 8; // File is busy
+export const NHACP_ERROR_EEXIST = 9; // File already exists
+export const NHACP_ERROR_EISDIR = 10; // File is a directory
+export const NHACP_ERROR_EINVAL = 11; // Invalid argument / request
+export const NHACP_ERROR_ENFILE = 12; // Too many open files
+export const NHACP_ERROR_EFBIG = 13; // File is too large
+export const NHACP_ERROR_ENOSPC = 14; // Out of space
+export const NHACP_ERROR_ESEEK = 15; // Seek on non - seekable file
+export const NHACP_ERROR_ENOTDIR = 16; // File is not a directory
+export const NHACP_ERROR_ENOTEMPTY = 17; // Directory is not empty
+export const NHACP_ERROR_ESRCH = 18; // No such process or session
+export const NHACP_ERROR_ENSESS = 19; // Too many sessions
+export const NHACP_ERROR_EAGAIN = 20; // Try again later
+export const NHACP_ERROR_EROFS = 21; // Storage object is write - protected
 
 export const unimplemented = {
    [MSG_RN_FH_SIZE]: 'MSG_RN_FH_SIZE',
