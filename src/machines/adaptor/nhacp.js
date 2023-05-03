@@ -153,9 +153,12 @@ export const nhacpStates = {
     dispatch(NABU.NHACP_REQUEST_STORAGE_GET_BLOCK, 'handleNhacpStorageGetBlock'),
     dispatch(NABU.NHACP_REQUEST_FILE_CLOSE, 'handleNhacpFileClose'),
     transition('done', 'reset', action(ctx => {
-      ctx.log(`Unhandled NHACP message type ${ctx.nhacp.message?.type}`);
+      throw new NhacpError(
+        NABU.NHACP_ERROR_ENOTSUP,
+        `Unhandled NHACP message type ${ctx.nhacp.message?.type}`
+      );
     })),
-    resetOnError
+    errorHandler
   ),
 
   // Pass NHACP-specific errors to special handling, otherwise reset
