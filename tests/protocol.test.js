@@ -116,7 +116,9 @@ const fakeNabu = () => {
   };
 };
 
-const startAdaptor = (files) => {
+const pakChannel = { baseUrl: 'https://example.test/', imageDir: 'cycle', imageName: null };
+
+const startAdaptor = (files, channel = pakChannel) => {
   vi.stubGlobal('fetch', async url => {
     const name = url.split('/').pop();
     if (!files[name]) return { ok: false, status: 404 };
@@ -131,7 +133,7 @@ const startAdaptor = (files) => {
   interpret(protocolMachine, () => { }, {
     port: nabu.port,
     portInfo: 'test',
-    getChannel: () => ({ baseUrl: 'https://example.test/', imageDir: 'cycle', imageName: null }),
+    getChannel: () => channel,
   });
   return nabu;
 };
@@ -147,6 +149,17 @@ const requestSegment = async (nabu, imageId, segment) => {
 };
 
 afterEach(() => vi.unstubAllGlobals());
+
+// Reassemble a raw image from the data of each segment's packet.
+const requestRawImage = async (nabu, imageId) => {
+  const chunks = [];
+  for (let segment = 0; ; segment++) {
+    const { status, packet } = await requestSegment(nabu, imageId, segment);
+    expect(status).toEqual([0xe4, 0x91]);
+    chunks.push(packet.subarray(16, -2));
+    if (packet[11] & 0x10) return concat(chunks);
+  }
+};
 
 describe('packet requests', () => {
   // Include 0x10 bytes so escaping gets exercised.
@@ -175,6 +188,34 @@ describe('packet requests', () => {
     const nabu = startAdaptor({});
     const res = await requestSegment(nabu, 0x000042, 0);
     expect(res.status).toEqual([0xe4, 0x90]);
+  });
+});
+
+describe('raw .nabu files', () => {
+  const image = (seed, length) =>
+    Uint8Array.from({ length }, (_, i) => (i * seed + 3) & 0xff);
+
+  it('serves a file per image with imageType nabu', async () => {
+    const files = {
+      '000001.nabu': image(5, 300),
+      '000002.nabu': image(7, 2500),
+      '000004.nabu': image(11, 991),
+    };
+    const nabu = startAdaptor(files,
+      { baseUrl: 'https://example.test/', imageDir: 'Lady Bug', imageName: null, imageType: 'nabu' });
+
+    for (const [name, data] of Object.entries(files)) {
+      expect(await requestRawImage(nabu, parseInt(name, 16))).toEqual(data);
+    }
+  });
+
+  it('serves the one imageName file for any image', async () => {
+    const data = image(13, 1200);
+    const nabu = startAdaptor({ 'game.nabu': data },
+      { baseUrl: 'https://example.test/', imageDir: 'titles', imageName: 'game.nabu' });
+
+    expect(await requestRawImage(nabu, 0x000001)).toEqual(data);
+    expect(await requestRawImage(nabu, 0x000002)).toEqual(data);
   });
 });
 

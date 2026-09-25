@@ -230,21 +230,30 @@ const machine = createMachine({
   awaitUnauthAck: expectToReceive([NABU.MSGSEQ_ACK], 'idle'),
 
   loadImageData: invoke(async ctx => {
+    // A channel serves images one of three ways:
+    //  - imageName: that one raw file, whatever image is requested
+    //    (a single-file homebrew program).
+    //  - imageType 'nabu': a raw file per image, named by ID (000001.nabu),
+    //    for multi-file programs laid out for the Internet Adapter's local
+    //    folder.
+    //  - otherwise, a pak per image, named by ID (000001.pak).
     const makeImageUrl = (imageId, channel) => {
-      const pakId = imageId.toString(16).padStart(6, '0');
-      // If a file name is set, override the pak file
-      const fileId = channel.imageName ?? `${pakId}.pak`;
+      const id = imageId.toString(16).padStart(6, '0');
+      const isPak = !channel.imageName && channel.imageType !== 'nabu';
+      const fileId = channel.imageName ?? `${id}.${isPak ? 'pak' : 'nabu'}`;
       const url = `${channel.baseUrl}${channel.imageDir}/${fileId}`;
-      return { url, fileId };
+      return { url, fileId, isPak };
     };
 
-    const { url, fileId } = makeImageUrl(ctx.image.imageId, ctx.getChannel());
+    const { url, fileId, isPak } =
+      makeImageUrl(ctx.image.imageId, ctx.getChannel());
 
     // We retain the last image since multiple segments will be requested.
     if (ctx?.image?.url !== url) {
       ctx.log('preparing new image');
       ctx.image = {
-        url, fileId, imageId: ctx.image.imageId, segment: ctx.image.segment
+        url, fileId, isPak,
+        imageId: ctx.image.imageId, segment: ctx.image.segment
       };
     }
 
@@ -292,7 +301,7 @@ const machine = createMachine({
     let isLast = false;
     let pakHeader;
 
-    if (!ctx.getChannel().imageName) {
+    if (ctx.image.isPak) {
       // A pak is a series of [length (2, LE)][header][data][CRC] packets,
       // all full-size except the last, and often followed by padding. Send
       // the packet's own header (it varies between programs) and data,
