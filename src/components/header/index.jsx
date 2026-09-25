@@ -3,6 +3,9 @@ import style from './style.module.css';
 import { useContext, useState } from 'preact/hooks';
 import { AdaptorContext } from '../adaptor-context';
 import { ConfigContext, channelFromEntry } from '../config-context';
+import { addRecent, loadRecent } from '../channel-list';
+import { ChannelGuide } from '../channel-guide';
+import { NabuIcon } from '../channel-guide/nabu-icon';
 
 import { WebSocketDialog } from './websocket-dialog';
 
@@ -52,6 +55,9 @@ const Header = () => {
   const adaptor = useContext(AdaptorContext);
   const [current, send] = adaptor;
 
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [recent, setRecent] = useState(loadRecent);
+
   const setChannel = value => {
     const entry = config.channelList.find(c => c.value === value);
     setConfig({
@@ -59,7 +65,11 @@ const Header = () => {
       channelValue: value,
       channel: channelFromEntry(config, entry),
     });
+    setRecent(recent => addRecent(recent, value));
+    setGuideOpen(false);
   };
+
+  const currentEntry = config.channelList?.find(c => c.value === config.channelValue);
 
   const [wsDialogOpen, setWsDialogOpen] = useState(false);
   const [wsUrl, setWsUrl] = useState('ws://127.0.0.1:5818');
@@ -79,35 +89,40 @@ const Header = () => {
         <img src="/assets/nabu-run.svg" alt="nabu.run logo" height="64" />
       </a>
       <div class={style.controls}>
-        {config.channelList ?
-          <ChannelSelector
-            value={config.channelValue} channelList={config.channelList}
-            onChange={setChannel} />
+        {currentEntry ?
+          <ChannelButton entry={currentEntry} open={guideOpen}
+            onClick={() => setGuideOpen(true)} />
           : ""}
         <div class={style.ports}>
           {current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
           {current.context?.serial ? <WebSocketButton current={current} onClick={onClickWsButton} /> : ""}
         </div>
       </div>
+      {config.channelList ?
+        <ChannelGuide open={guideOpen}
+          categories={config.channelCategories} channels={config.channelList}
+          current={config.channelValue} recent={recent}
+          onTune={setChannel} onClose={() => setGuideOpen(false)} />
+        : ""}
       <WebSocketDialog open={wsDialogOpen} value={wsUrl}
         onConnect={handleConnect} onCancel={() => setWsDialogOpen(false)} />
     </header>
   );
 };
 
-function ChannelSelector(props) {
-  const { value, channelList, onChange } = props;
+function ChannelButton(props) {
+  const { entry, open, onClick } = props;
 
   return (
-    <span class={style.channel}>
-      <label for="channel-select">Channel</label>
-      <select id="channel-select" value={value}
-        onChange={e => onChange(e.currentTarget.value)}>
-        {channelList.map(option => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </span>
+    <button class={style.channel} onClick={onClick}
+      aria-haspopup="dialog" aria-expanded={open ? 'true' : 'false'}>
+      <NabuIcon icon={entry.icon} />
+      <span class={style.channelText}>
+        <span class={style.channelNumber}>Channel {entry.number}</span>
+        <span class={style.channelLabel}>{entry.label}</span>
+      </span>
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 6l6 6 6-6" /></svg>
+    </button>
   );
 }
 
