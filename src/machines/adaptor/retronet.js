@@ -13,7 +13,7 @@
 // Handlers for the RetroNET protocol
 
 import { transition, invoke } from 'robot3';
-import { hex, baseName, bytesToString } from './util';
+import { baseName, bytesToString } from './util';
 
 import { resetOnError, getBytes } from './common';
 import * as NABU from './constants';
@@ -60,7 +60,9 @@ export const retroNetStates = {
       try {
         await fetchFile(ctx, fileName);
         size = ctx.rn.files[fileName].size;
-      } catch { }
+      } catch {
+        // A missing file reports size -1.
+      }
 
       const message = `FileSize ${baseName(fileName)}: ${size}`;
       ctx.log(message);
@@ -114,10 +116,7 @@ export const retroNetStates = {
       const fh = ctx.rn.handles[fileHandle];
       const fileName = fh.fileName;
 
-      try {
-        await fetchFile(ctx, fileName);
-      }
-      catch (err) { throw err }
+      await fetchFile(ctx, fileName);
       const file = ctx.rn.files[fileName];
 
       const reply = new Uint8Array(83);
@@ -160,10 +159,7 @@ export const retroNetStates = {
       const fh = ctx.rn.handles[fileHandle];
       const fileName = fh.fileName;
 
-      try {
-        await fetchFile(ctx, fileName);
-      }
-      catch (err) { throw err }
+      await fetchFile(ctx, fileName);
       const { fileData, size } = ctx.rn.files[fileName];
 
       const pos = fh?.pos ?? 0;
@@ -261,10 +257,7 @@ export const retroNetStates = {
       const fh = ctx.rn.handles[fileHandle];
       const fileName = fh.fileName;
 
-      try {
-        await fetchFile(ctx, fileName);
-      }
-      catch (err) { throw err }
+      await fetchFile(ctx, fileName);
       const { fileData } = ctx.rn.files[fileName];
 
       // Just count the number of newlines
@@ -292,10 +285,7 @@ export const retroNetStates = {
       const fh = ctx.rn.handles[fileHandle];
       const fileName = fh.fileName;
 
-      try {
-        await fetchFile(ctx, fileName);
-      }
-      catch (err) { throw err }
+      await fetchFile(ctx, fileName);
       const { fileData, size } = ctx.rn.files[fileName];
 
       const message = `GetLine {${fileHandle}} ${lineNumber}`;

@@ -10,15 +10,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useContext, useState } from 'preact/hooks';
+import { useContext } from 'preact/hooks';
 import { AdaptorContext } from '../../components/adaptor-context';
 import { baseName } from '../../machines/adaptor/util';
-import style from './style.css';
+import style from './style.module.css';
 
 
 const Home = () => {
-  const adaptor = useContext(AdaptorContext);
-  const [current, send] = adaptor;
+  const [current] = useContext(AdaptorContext);
 
   return (
     <div class={style.home}>
@@ -38,7 +37,7 @@ const Home = () => {
       </p>
 
       <p>
-        <span class={style.small}>v{process.env.VERSION}</span>
+        <span class={style.small}>v{import.meta.env.PACKAGE_VERSION}</span>
         <span class={style.small} style="float: right">
           Made by <a href="https://masto.me">@masto</a>
         </span>
@@ -66,7 +65,9 @@ function OpenFileList(props) {
       <h2>Open files</h2>
       <ul>
         {handles.map((fh, i) =>
-          <li>{'{' + i + '}'} {baseName(fh.fileName)}
+          // The index is the file descriptor, so it's a stable key.
+          // eslint-disable-next-line @eslint-react/no-array-index-key
+          <li key={i}>{'{' + i + '}'} {baseName(fh.fileName)}
             {fh.fileFlag & 1 ? ' (rw)' : ' (ro)'}</li>
         )}
       </ul>
@@ -75,23 +76,23 @@ function OpenFileList(props) {
 }
 
 function AdaptorState(props) {
-  const { current, onChange } = props;
+  const { current } = props;
 
   const state = current.name;
-  const port = current.context?.port;
   const portInfo = current.context?.portInfo;
   const progress = current.context?.progress;
 
   const hasOpenFiles = current.context?.rn?.handles?.some(e => e);
 
+  // A <div>, not a <p>: it contains block elements.
   return (
-    <p>
+    <div>
       <div>Adaptor state: {state}</div>
       <div>Port: {portInfo ?? 'not connected'}</div>
       {progress ? <div class={style.progressMessage}>{progress.message}</div> : ""}
       {progress?.complete ? <ProgressIndicator complete={progress.complete} total={progress.total} /> : ""}
       {hasOpenFiles ? <OpenFileList handles={current.context.rn.handles} /> : ""}
-    </p>
+    </div>
   );
 }
 

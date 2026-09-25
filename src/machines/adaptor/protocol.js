@@ -14,10 +14,12 @@
 // has been established.
 
 import {
-  createMachine, state, transition, invoke, immediate, reduce, action,
+  createMachine, state, transition, invoke, immediate, action,
   guard, state as final
 } from 'robot3';
-import { crc16ccitt } from 'crc';
+
+// The calculator works on a Uint8Array directly; the main entry needs Buffer.
+import crc16ccitt from 'crc/calculators/crc16ccitt';
 import { hex, escapeNabuMsg } from './util';
 
 import {
@@ -48,7 +50,7 @@ const setHeader = (buf, imageId, segment, offset, isLast) => {
   // type (some flag bits)
   header.setUint8(11, (segment == 0 ? 0xa1 : 0x20) | (isLast ? 0x10 : 0x00));
 
-  header.setUint16(12, segment);   // segment number, again
+  header.setUint16(12, segment, true); // segment number, again (LE)
   header.setUint16(14, offset);    // offset
 };
 
@@ -282,42 +284,63 @@ const machine = createMachine({
 
     const segment = ctx.image.segment;
 
-    // pak files are pre-packetized, but for the sake of simplicity
-    // of handling both paks and raw files, we'll just extract the data
-    // from the pak and regenerate the header and CRC. Sorry for
-    // wasting electricity.
+    // Where this segment's data starts in the image, which goes in a
+    // generated header, and where it starts in the file we fetched.
+    const offset = segment * NABU.MAXPAYLOADSIZE;
+    let fileOffset = offset;
     let len = NABU.MAXPAYLOADSIZE;
-    let offset = segment * NABU.MAXPAYLOADSIZE;
-    if (!ctx.getChannel().imageName) {
-      // for pak, skip over headers
-      offset += NABU.HEADERSIZE + NABU.FOOTERSIZE +
-        segment * (NABU.HEADERSIZE + NABU.FOOTERSIZE + 2);
-    }
     let isLast = false;
+    let pakHeader;
 
-    if (offset >= dataSize) {
-      throw new Error(`offset ${offset} exceeds size ${dataSize}`);
+    if (!ctx.getChannel().imageName) {
+      // A pak is a series of [length (2, LE)][header][data][CRC] packets,
+      // all full-size except the last, and often followed by padding. Send
+      // the packet's own header (it varies between programs) and data,
+      // using its length rather than the file size so the CRC and padding
+      // aren't sent as data.
+      const packetStart = segment * (2 + NABU.TOTALPAYLOADSIZE);
+      if (packetStart + 2 + NABU.HEADERSIZE > dataSize) {
+        throw new Error(`segment ${segment} is past the end of the pak`);
+      }
+      const view = new DataView(data);
+      const pakPacketLen = view.getUint16(packetStart, true);
+      pakHeader = new Uint8Array(data, packetStart + 2, NABU.HEADERSIZE);
+      fileOffset = packetStart + 2 + NABU.HEADERSIZE;
+      len = Math.min(pakPacketLen - NABU.HEADERSIZE - NABU.FOOTERSIZE,
+        dataSize - fileOffset);
     }
+    else {
+      if (fileOffset >= dataSize) {
+        throw new Error(`offset ${fileOffset} exceeds size ${dataSize}`);
+      }
 
-    // Cap the final packet to the remaining bytes.
-    if (offset + len >= dataSize) {
-      len = dataSize - offset;
-      isLast = true;
+      // Raw files get a generated header. Cap the final packet to the
+      // remaining bytes.
+      if (fileOffset + len >= dataSize) {
+        len = dataSize - fileOffset;
+        isLast = true;
+      }
     }
 
     ctx.progress = {
-      fileName: ctx.image.fileId, total: dataSize, complete: offset + len,
+      fileName: ctx.image.fileId, total: dataSize, complete: fileOffset + len,
       message: `Loading ${ctx.image.fileId}`
     };
 
     let packetLen = len + NABU.HEADERSIZE;
     let buf = new Uint8Array(packetLen + NABU.FOOTERSIZE);
-    setHeader(buf.subarray(0, 16), ctx.image.imageId, segment, offset, isLast);
+    if (pakHeader) {
+      buf.set(pakHeader, 0);
+    }
+    else {
+      setHeader(buf.subarray(0, 16), ctx.image.imageId, segment, offset, isLast);
+    }
 
     // Copy data
-    buf.set(new Uint8Array(data, offset, len), 16);
+    buf.set(new Uint8Array(data, fileOffset, len), 16);
 
-    // Calculate CRC
+    // Calculate CRC. For a pak this matches the stored one, unless the
+    // pak is damaged.
     let crc = crc16ccitt(buf.subarray(0, packetLen)) ^ 0xffff;
     new DataView(buf.buffer).setUint16(packetLen, crc);
 

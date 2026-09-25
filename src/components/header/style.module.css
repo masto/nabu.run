@@ -91,3 +91,57 @@ button.port:disabled {
   color: var(--nabu-white);
   background-color: var(--nabu-light-blue);
 }
+
+.dialog {
+  max-width: min(32rem, calc(100vw - 2rem));
+  padding: 1rem 1.25rem;
+  border: 2px solid var(--nabu-gray);
+  border-radius: 12px;
+  color: var(--nabu-white);
+  background: var(--nabu-dark-blue);
+  font-size: 14pt;
+}
+
+.dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.dialog h2 {
+  margin: 0 0 0.5rem;
+  font-size: 18pt;
+  font-weight: normal;
+}
+
+.dialog input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px 6px;
+  border: 1px solid var(--nabu-gray);
+  border-radius: 0.25em;
+  font: inherit;
+  color: var(--nabu-white);
+  background: var(--nabu-light-blue);
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.dialogActions button {
+  padding: 9px 12px 6px;
+  border: none;
+  border-radius: 12px;
+  font: inherit;
+  text-transform: uppercase;
+  color: var(--nabu-white);
+  background: var(--nabu-dark-green);
+  cursor: pointer;
+}
+
+.dialogActions button[type="button"] {
+  background: var(--nabu-gray);
+  color: var(--nabu-black);
+}

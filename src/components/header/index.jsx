@@ -1,9 +1,8 @@
-import { Link } from 'preact-router/match';
-import style from './style.css';
+import style from './style.module.css';
 
 import { useContext, useState } from 'preact/hooks';
 import { AdaptorContext } from '../adaptor-context';
-import { ConfigContext } from '../../components/config-context';
+import { ConfigContext, channelFromEntry } from '../config-context';
 
 import { WebSocketDialog } from './websocket-dialog';
 
@@ -53,12 +52,12 @@ const Header = () => {
   const adaptor = useContext(AdaptorContext);
   const [current, send] = adaptor;
 
-  const setChannel = event => {
+  const setChannel = value => {
+    const entry = config.channelList.find(c => c.value === value);
     setConfig({
       ...config,
-      channel: {
-        ...config.channel, baseUrl: config.baseUrl, ...event.target.value
-      }
+      channelValue: value,
+      channel: channelFromEntry(config, entry),
     });
   };
 
@@ -77,12 +76,13 @@ const Header = () => {
   return (
     <header class={style.header}>
       <a href="/" class={style.logo}>
-        <img src="../../assets/nabu-run.svg" alt="nabu.run logo" height="64" />
+        <img src="/assets/nabu-run.svg" alt="nabu.run logo" height="64" />
       </a>
       <div class={style.controls}>
         {config.channelList ?
           <ChannelSelector
-            channel={config.channel} channelList={config.channelList} onChange={setChannel} />
+            value={config.channelValue} channelList={config.channelList}
+            onChange={setChannel} />
           : ""}
         <div class={style.ports}>
           {current.context?.serial ? <SerialButton current={current} send={send} /> : ""}
@@ -95,41 +95,20 @@ const Header = () => {
   );
 };
 
-const Select = ({ label, value, options, onChange }) => {
-  return (
-    <>
-      <label for="channel-select">
-        {label}
-      </label>
-      <select value={value} onChange={onChange} id="channel-select">
-        {options.map((option) => (
-          <option value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </>
-  );
-};
-
 function ChannelSelector(props) {
-  const { channelList, onChange } = props;
-
-  const [value, setValue] = useState('cycle 2 raw');
-
-  const selectChannel = event => {
-    setValue(event.target.value);
-    const newChannel = channelList.find(v => v.value === event.target.value).channel;
-    onChange({ target: { value: newChannel } });
-  };
+  const { value, channelList, onChange } = props;
 
   return (
     <span class={style.channel}>
-      <Select
-        label='Channel'
-        options={channelList}
-        value={value}
-        onChange={selectChannel} />
+      <label for="channel-select">Channel</label>
+      <select id="channel-select" value={value}
+        onChange={e => onChange(e.currentTarget.value)}>
+        {channelList.map(option => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
     </span>
-  )
+  );
 }
 
 export default Header;

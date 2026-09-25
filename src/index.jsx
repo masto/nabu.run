@@ -10,7 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import './style';
+import { render } from 'preact';
+import './style/index.css';
 import App from './components/app';
 
-export default App;
+render(<App />, document.body);

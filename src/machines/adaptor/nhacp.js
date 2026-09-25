@@ -14,7 +14,7 @@
 // Docs: https://github.com/thorpej/nabu-figforth/blob/dev/nhacp-draft-0.1/nabu-comms.md
 
 import { state, immediate, transition, invoke, action, reduce, guard } from 'robot3';
-import { hex, baseName, bytesToString } from './util';
+import { baseName, bytesToString } from './util';
 
 import { resetOnError, getBytes, decodeType, decodeStruct } from './common';
 import * as NABU from './constants';
@@ -68,6 +68,7 @@ const errorFrame = (code, message) => {
 const getNhacpString = bytes => {
   const length = bytes.shift();
   const string = bytesToString(bytes.slice(0, length));
+  // eslint-disable-next-line no-control-regex -- strings are NUL-terminated
   return string.replace(/\x00.*$/, '');
 };
 
@@ -254,10 +255,7 @@ export const nhacpStates = {
       ctx.progress = { fileName: request.url, message: status };
 
       // Get the file
-      try {
-        await fetchFile(ctx, request.url);
-      }
-      catch (err) { throw err }
+      await fetchFile(ctx, request.url);
 
       // All good if we made it this far.
       ctx.nhacp.handles[fd] = { url: request.url, flags: request.flags };
@@ -340,7 +338,9 @@ export const nhacpStates = {
         ctx.log(status);
         ctx.progress = { fileName: url, message: status };
       }
-      catch { }
+      catch {
+        // Closing something that isn't open is harmless.
+      }
     },
     transition('done', 'idle'),
     errorHandler

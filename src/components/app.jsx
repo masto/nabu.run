@@ -12,36 +12,32 @@
 
 import { Router } from 'preact-router';
 import { useState, useEffect } from 'preact/hooks';
-import { useMachine } from 'preact-robot';
+import { useMachine } from './use-machine';
 
-import adaptorMachine from '/machines/adaptor';
-import { ConfigContext } from './config-context';
+import adaptorMachine from '../machines/adaptor';
+import { ConfigContext, channelFromEntry } from './config-context';
 import { AdaptorContext } from './adaptor-context';
 
 import Header from './header';
 import Home from '../routes/home';
 import Faq from '../routes/home/faq';
 
-const initConfig = () => {
-  let
-    baseUrl = '',
-    imageDir = '',
-    imageName = null,
-    channelsUrl = '/channels.json',
-    rnProxyUrl = '';
-  try { baseUrl = process.env.PREACT_APP_BASE_URL } catch { };
-  try { imageDir = process.env.PREACT_APP_IMAGE_DIR } catch { };
-  try { imageName = process.env.PREACT_APP_IMAGE_NAME } catch { };
-  try { channelsUrl = process.env.PREACT_APP_CHANNELS_URL } catch { };
-  try { rnProxyUrl = process.env.PREACT_APP_RETRONET_PROXY } catch { };
+const env = import.meta.env;
 
+const initConfig = () => {
+  const baseUrl = env.PREACT_APP_BASE_URL ?? '';
   return {
-    channelsUrl,
+    channelsUrl: env.PREACT_APP_CHANNELS_URL ?? 'https://catalog.nabu.run/channels.json',
     baseUrl,
-    rnProxyUrl,
-    channel: { baseUrl, imageDir, imageName }
+    rnProxyUrl: env.PREACT_APP_RETRONET_PROXY ?? '',
+    // Used until the channel list loads, or if it fails to.
+    channel: {
+      baseUrl,
+      imageDir: env.PREACT_APP_IMAGE_DIR ?? '',
+      imageName: env.PREACT_APP_IMAGE_NAME ?? null,
+    },
   };
-}
+};
 
 // This is the only way I've been able to allow the state machine to
 // have access to live app configuration.
@@ -57,29 +53,36 @@ const loadChannelList = async (url) => {
     throw new Error(`fetch channels: ${response.status}`);
   }
 
-  const channels = await response.json();
-
-  return channels;
+  return response.json();
 };
 
 
 const App = () => {
-  const [config, setConfig] = useState(initConfig());
+  const [config, setConfig] = useState(initConfig);
   useEffect(() => syncConfig(config), [config]);
 
   const adaptor = useMachine(adaptorMachine, {
-    // Use of `navigator` breaks pre-rendering, so wrap it in a guard
-    serial: typeof window !== 'undefined' ? navigator?.serial : undefined,
+    serial: navigator.serial,
     getChannel: () => extern_config.channel,
     rnProxyUrl: config.rnProxyUrl,
-    ...(process.env.NODE_ENV === 'development' ?
-      { log: (...a) => console.log(...a) } : {})
+    ...(import.meta.env.DEV ? { log: (...a) => console.log(...a) } : {})
   });
 
   useEffect(() => {
-    if (config.channelsUrl)
-      loadChannelList(config.channelsUrl).then(list => setConfig({ ...config, channelList: list }));
-  }, []);
+    if (!config.channelsUrl) return;
+    loadChannelList(config.channelsUrl)
+      .then(list => setConfig(config => {
+        // The list can mark a default; otherwise start with the first entry.
+        const entry = list.find(c => c.default) ?? list[0];
+        return entry ? {
+          ...config,
+          channelList: list,
+          channelValue: entry.value,
+          channel: channelFromEntry(config, entry),
+        } : config;
+      }))
+      .catch(e => console.error('could not load channel list:', e));
+  }, [config.channelsUrl]);
 
   return (
     <ConfigContext.Provider value={[config, setConfig]}>
@@ -95,7 +98,7 @@ const App = () => {
         </div>
       </AdaptorContext.Provider>
     </ConfigContext.Provider>
-  )
+  );
 };
 
 export default App;

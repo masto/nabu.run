@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import style from '../style.css';
+import style from '../style.module.css';
 
 const Faq = () => {
   return (
@@ -95,7 +95,7 @@ const Faq = () => {
       <p class={style.small} style="text-align: right">
         Made by <a href="https://masto.me">@masto</a>
       </p>
-    </div >
+    </div>
   );
 };
 

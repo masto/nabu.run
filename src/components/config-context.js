@@ -18,3 +18,9 @@
 import { createContext } from 'preact';
 
 export const ConfigContext = createContext();
+
+// Turn a channel list entry into the channel the adaptor serves from.
+// Entries without their own baseUrl use the global one.
+export const channelFromEntry = (config, entry) => ({
+  baseUrl: config.baseUrl, imageName: null, ...entry.channel
+});
