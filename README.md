@@ -41,21 +41,30 @@ serial port to RX and TX baud rates of 115200, and 2 stop bits.
 
 # Development
 
-## Preact-CLI Commands
+Requires Node.js 22.12 or newer. Built with [Vite](https://vite.dev/).
 
 ```bash
 # install dependencies
 npm install
 
-# serve with hot reload at localhost:8080
+# serve with hot reload at localhost:5173
 npm run dev
 
-# build for production with minification
+# build for production into build/
 npm run build
 
-# test the production build locally
+# test the production build locally at localhost:8080
 npm run serve
 
-# run tests with jest and enzyme
-npm run test
+# lint and run tests
+npm run lint
+npm test
 ```
+
+Build settings (channel list URL, default base URL, RetroNET proxy) are in
+`.env`. Put local overrides in `.env.local`, which isn't committed.
+
+The protocol tests can also replay real cycle paks. Set `NABU_CYCLES_DIR` (in
+`.env.local` or the environment) to a directory of paks laid out as
+`<cycle>/<pak id>.pak`, e.g. `cycle-2/000001.pak`. A sample is replayed by
+default; set `NABU_ALL_PAKS=1` to replay every pak in the directory.

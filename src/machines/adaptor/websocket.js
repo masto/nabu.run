@@ -13,11 +13,8 @@
 // WebSocket port management
 
 import {
-  state, transition, invoke, immediate, reduce, action, guard
+  state, transition, invoke, immediate, reduce, action
 } from 'robot3';
-
-import { fatalError } from './common';
-import { hex } from './util';
 
 export const webSocketStates = {
   requestingWsPort: state(
@@ -81,7 +78,7 @@ export const webSocketStates = {
         ctx.portInfo = `websocket(${ctx.port.websocket.url})`;
       })),
     transition('error', 'closed', action((ctx, ev) => {
-      if (CloseEvent.prototype.isPrototypeOf(ev.error)) {
+      if (ev.error instanceof CloseEvent) {
         alert(`WebSocket connection to ${ev.error.target.url} failed.\r` +
           `Code: ${ev.error.code} ${ev.error.reason}`);
       }
