@@ -39,6 +39,50 @@ mame nabupc -window -kbd nabu_hle -hcca null_modem -bitb socket.127.0.0.1:5817
 It was also necessary to go into the MAME machine settings and configure the
 serial port to RX and TX baud rates of 115200, and 2 stop bits.
 
+# Channel list
+
+The channels nabu.run offers come from a JSON file, set by
+`PREACT_APP_CHANNELS_URL` in `.env`. It groups channels into categories,
+which the channel guide shows in order:
+
+```json
+{
+  "categories": [
+    {
+      "name": "NABU Cycles",
+      "description": "The original NABU Network broadcasts, restored.",
+      "color": "#d7b454",
+      "channels": [
+        {
+          "label": "NABU Network 1986 Cycle v3",
+          "value": "cycle-3",
+          "default": true,
+          "author": "NABU Corp.",
+          "description": "The third NABU cycle ...",
+          "icon": { "pattern": "AACAwODw...", "color": "lJSUlJSU..." },
+          "channel": { "imageDir": "assets/cycles/cycle-3", "imageName": null }
+        }
+      ]
+    }
+  ]
+}
+```
+
+- `label`, `value` and `channel` are required. `value` identifies the
+  channel, so it has to be unique across the whole file. `channel` is what
+  the adaptor serves: `imageDir`, `imageName` (a single file, or `null` for
+  a cycle of paks), and optionally `baseUrl` and `imageType`.
+- `default: true` picks the channel to start on; otherwise it's the first one.
+- `author`, `description` and `icon` are optional and shown in the guide.
+  `icon` is a 16x16 TMS9918 tile in the Internet Adapter's format: base64
+  `IconTilePattern` and `IconTileColor` (32 bytes each), copied as-is from
+  its `filesV3.json`. Channels without one get the NABU logo.
+- A category's `description` and `color` are optional too.
+- Channel numbers are made up from the order: the 3rd channel in the 2nd
+  category is 203. Reordering the file renumbers them.
+
+A plain array of channels (the old format) still works, as one category.
+
 # Development
 
 Requires Node.js 22.12 or newer. Built with [Vite](https://vite.dev/).

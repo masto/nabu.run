@@ -16,6 +16,7 @@ import { useMachine } from './use-machine';
 
 import adaptorMachine from '../machines/adaptor';
 import { ConfigContext, channelFromEntry } from './config-context';
+import { parseChannelList } from './channel-list';
 import { AdaptorContext } from './adaptor-context';
 
 import Header from './header';
@@ -71,12 +72,14 @@ const App = () => {
   useEffect(() => {
     if (!config.channelsUrl) return;
     loadChannelList(config.channelsUrl)
-      .then(list => setConfig(config => {
+      .then(data => setConfig(config => {
+        const { categories, channels } = parseChannelList(data);
         // The list can mark a default; otherwise start with the first entry.
-        const entry = list.find(c => c.default) ?? list[0];
+        const entry = channels.find(c => c.default) ?? channels[0];
         return entry ? {
           ...config,
-          channelList: list,
+          channelCategories: categories,
+          channelList: channels,
           channelValue: entry.value,
           channel: channelFromEntry(config, entry),
         } : config;

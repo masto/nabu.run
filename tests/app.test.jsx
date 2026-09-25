@@ -39,22 +39,13 @@ describe('home page', () => {
 
   it('selects the channel marked default', async () => {
     render(<App />);
-    const select = await screen.findByLabelText('Channel');
-    expect(select.value).toBe('cycle-2');
+    expect(await screen.findByRole('button', { name: /Channel 102 Cycle 2/ })).toBeTruthy();
   });
 
   it('falls back to the first channel without a default', async () => {
     stubChannels(channels.map(({ default: _, ...c }) => c));
     render(<App />);
-    const select = await screen.findByLabelText('Channel');
-    expect(select.value).toBe('cycle-1');
-  });
-
-  it('changes channel', async () => {
-    render(<App />);
-    const select = await screen.findByLabelText('Channel');
-    fireEvent.change(select, { target: { value: 'pac-man' } });
-    await waitFor(() => expect(screen.getByLabelText('Channel').value).toBe('pac-man'));
+    expect(await screen.findByRole('button', { name: /Channel 101 Cycle 1/ })).toBeTruthy();
   });
 
   it('opens and cancels the WebSocket dialog', async () => {
@@ -62,7 +53,7 @@ describe('home page', () => {
     await screen.findByText('Adaptor state: waitingForPort');
     fireEvent.click(screen.getByRole('button', { name: 'Connect WebSocket' }));
 
-    const dialog = document.querySelector('dialog');
+    const dialog = document.querySelector('dialog[aria-labelledby="ws-dialog-title"]');
     await waitFor(() => expect(dialog.open).toBe(true));
     expect(screen.getByLabelText('WebSocket URL').value).toBe('ws://127.0.0.1:5818');
 
@@ -77,6 +68,129 @@ describe('home page', () => {
 
     fireEvent.click(screen.getByRole('link', { name: 'Back to Home' }));
     expect(await screen.findByText('Adaptor state: waitingForPort')).toBeTruthy();
+  });
+});
+
+describe('channel guide', () => {
+  const categorized = {
+    categories: [
+      {
+        name: 'Cycles', description: 'The originals',
+        channels: [
+          { label: 'Cycle 1', value: 'cycle-1', channel: { imageDir: 'cycles/cycle-1' } },
+          { label: 'Cycle 2', value: 'cycle-2', default: true, channel: { imageDir: 'cycles/cycle-2' } },
+        ],
+      },
+      {
+        name: 'Games',
+        channels: [
+          { label: 'Pac-Man', value: 'pac-man', author: 'Namco', channel: { imageDir: 'titles', imageName: 'pac-man.nabu' } },
+          { label: 'Tetris', value: 'tetris', author: 'ProductionDave', channel: { imageDir: 'titles', imageName: 'tetris.nabu' } },
+        ],
+      },
+    ],
+  };
+
+  const openGuide = async (current = /Channel 102/) => {
+    fireEvent.click(await screen.findByRole('button', { name: current }));
+    const dialog = document.querySelector('dialog[aria-labelledby="channel-guide-title"]');
+    await waitFor(() => expect(dialog.open).toBe(true));
+    return dialog;
+  };
+
+  const channelButton = label => screen.getByRole('option', { name: new RegExp(label) });
+  const key = (el, k) => fireEvent.keyDown(el, { key: k });
+
+  beforeEach(() => stubChannels(categorized));
+
+  it('tunes a channel found by search', async () => {
+    render(<App />);
+    const dialog = await openGuide();
+    fireEvent.input(screen.getByLabelText('Search channels'), { target: { value: 'namco' } });
+
+    expect(screen.getByText('1 match for “namco”')).toBeTruthy();
+    fireEvent.click(channelButton('Pac-Man'));
+    fireEvent.click(screen.getByRole('button', { name: 'Tune in' }));
+
+    await waitFor(() => expect(dialog.open).toBe(false));
+    expect(screen.getByRole('button', { name: /Channel 201 Pac-Man/ })).toBeTruthy();
+  });
+
+  it('matches channel numbers', async () => {
+    render(<App />);
+    await openGuide();
+    fireEvent.input(screen.getByLabelText('Search channels'), { target: { value: '202' } });
+    expect(screen.getAllByRole('option').map(o => o.dataset.channel)).toEqual(['tetris']);
+  });
+
+  it('filters by category', async () => {
+    render(<App />);
+    await openGuide();
+    fireEvent.click(screen.getByRole('button', { name: /Games/ }));
+    expect(screen.getAllByRole('option').map(o => o.dataset.channel)).toEqual(['pac-man', 'tetris']);
+  });
+
+  it('reopens in the same category', async () => {
+    render(<App />);
+    const dialog = await openGuide();
+    fireEvent.click(screen.getByRole('button', { name: /Games/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close channel guide' }));
+    await waitFor(() => expect(dialog.open).toBe(false));
+
+    await openGuide();
+    expect(screen.getByRole('button', { name: /Games/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByRole('option').map(o => o.dataset.channel)).toEqual(['pac-man', 'tetris']);
+  });
+
+  it('moves with the arrow keys and tunes with Enter', async () => {
+    render(<App />);
+    const dialog = await openGuide();
+
+    // Down from search into the list, which starts on the current channel.
+    key(screen.getByLabelText('Search channels'), 'ArrowDown');
+    expect(document.activeElement).toBe(channelButton('Cycle 2'));
+
+    key(document.activeElement, 'ArrowDown');
+    await waitFor(() => expect(document.activeElement).toBe(channelButton('Pac-Man')));
+    expect(channelButton('Pac-Man').getAttribute('aria-selected')).toBe('true');
+
+    // Right to the details, back left to the list, left again to the categories.
+    key(document.activeElement, 'ArrowRight');
+    expect(document.activeElement.textContent).toBe('Tune in');
+    key(document.activeElement, 'ArrowLeft');
+    expect(document.activeElement).toBe(channelButton('Pac-Man'));
+    key(document.activeElement, 'ArrowLeft');
+    expect(document.activeElement.textContent).toMatch(/All channels/);
+
+    // Down the categories narrows the list.
+    key(document.activeElement, 'ArrowDown');
+    await waitFor(() => expect(document.activeElement.textContent).toMatch(/Cycles/));
+    expect(screen.getAllByRole('option')).toHaveLength(2);
+
+    key(document.activeElement, 'ArrowRight');
+    key(document.activeElement, 'ArrowDown');
+    await waitFor(() => expect(document.activeElement).toBe(channelButton('Cycle 2')));
+    key(document.activeElement, 'ArrowUp');
+    await waitFor(() => expect(document.activeElement).toBe(channelButton('Cycle 1')));
+    key(document.activeElement, 'Enter');
+
+    await waitFor(() => expect(dialog.open).toBe(false));
+    expect(screen.getByRole('button', { name: /Channel 101 Cycle 1/ })).toBeTruthy();
+  });
+
+  it('remembers recently tuned channels', async () => {
+    localStorage.clear();
+    render(<App />);
+    await openGuide();
+    key(screen.getByLabelText('Search channels'), 'ArrowDown');
+    key(document.activeElement, 'End');
+    await waitFor(() => expect(document.activeElement).toBe(channelButton('Tetris')));
+    key(document.activeElement, 'Enter');
+
+    await openGuide(/Channel 202 Tetris/);
+    const recent = await screen.findByRole('group', { name: 'Recent channels' });
+    expect(recent.textContent).toMatch(/Tetris/);
+    expect(JSON.parse(localStorage.getItem('nabu.run:recentChannels'))).toEqual(['tetris']);
   });
 });
 
