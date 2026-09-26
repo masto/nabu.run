@@ -32,7 +32,7 @@ export default [
   },
   reactHooks.configs.flat['recommended-latest'],
   {
-    files: ['tests/**', '*.config.js'],
+    files: ['tests/**', 'tools/**', '*.config.js'],
     languageOptions: { globals: globals.node },
   },
   {
