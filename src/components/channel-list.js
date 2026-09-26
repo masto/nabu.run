@@ -20,6 +20,10 @@
 // Either way it becomes a list of categories, each channel getting a
 // channel number (category, then position: 3rd channel of category 2 is
 // "203") and the name of its category.
+//
+// A channel with "disabled": "reason" is left out, as if it weren't there;
+// the reason is a note for whoever maintains the list (e.g. "Needs
+// RetroNET file handles, which aren't implemented").
 
 // TMS9918 colors, used for categories that don't pick their own.
 const CATEGORY_COLORS = [
@@ -35,7 +39,7 @@ export function parseChannelList(data) {
     .map((c, ci) => {
       const name = c.name ?? `Category ${ci + 1}`;
       const channels = (c.channels ?? [])
-        .filter(e => e?.value && e.channel)
+        .filter(e => e?.value && e.channel && !e.disabled)
         .map((e, i) => ({
           ...e,
           number: `${ci + 1}${String(i + 1).padStart(2, '0')}`,

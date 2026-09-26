@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_ICON, decodeIcon, parseChannelList, searchChannels } from '../src/components/channel-list';
 
 describe('parseChannelList', () => {
+  it('leaves out disabled channels, and categories left empty', () => {
+    const { categories, channels } = parseChannelList({
+      categories: [
+        {
+          name: 'Games', channels: [
+            { label: 'A', value: 'a', channel: {} },
+            { label: 'B', value: 'b', channel: {}, disabled: 'Needs RetroNET' },
+            { label: 'C', value: 'c', channel: {} },
+          ],
+        },
+        { name: 'Network', channels: [{ label: 'D', value: 'd', channel: {}, disabled: 'Needs RetroNET' }] },
+      ],
+    });
+    expect(channels.map(c => [c.value, c.number])).toEqual([['a', '101'], ['c', '102']]);
+    expect(categories.map(c => c.name)).toEqual(['Games']);
+  });
+
   it('puts a flat list in one category', () => {
     const { categories, channels } = parseChannelList([
       { label: 'A', value: 'a', channel: { imageDir: 'x' } },
