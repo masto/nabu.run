@@ -141,3 +141,20 @@ export function addRecent(recent, value) {
   }
   return list;
 }
+
+// The channel in the page's URL (?ch=ishkur-nfs), so a channel can be
+// bookmarked or shared and survives a reload. It uses the channel's value,
+// which, unlike its number, doesn't change when the list is rearranged.
+export const channelFromUrl = () =>
+  new URLSearchParams(window.location.search).get('ch');
+
+// Put a channel in the URL, or take it out if null. Replaces the current
+// history entry, so changing channels doesn't fill up the back button.
+export function setChannelInUrl(value) {
+  const url = new URL(window.location.href);
+  if (value) url.searchParams.set('ch', value);
+  else url.searchParams.delete('ch');
+  if (url.href !== window.location.href) {
+    window.history.replaceState(window.history.state, '', url);
+  }
+}

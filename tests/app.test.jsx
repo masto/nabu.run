@@ -26,6 +26,9 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   route('/');
+  // route() doesn't touch the URL with no router mounted; start each test
+  // on a plain URL, since the channel is kept in it.
+  window.history.replaceState(null, '', '/');
   vi.unstubAllGlobals();
 });
 
@@ -191,6 +194,55 @@ describe('channel guide', () => {
     const recent = await screen.findByRole('group', { name: 'Recent channels' });
     expect(recent.textContent).toMatch(/Tetris/);
     expect(JSON.parse(localStorage.getItem('nabu.run:recentChannels'))).toEqual(['tetris']);
+  });
+});
+
+describe('channel in the URL', () => {
+  const at = url => window.history.replaceState(null, '', url);
+  const ch = () => new URLSearchParams(window.location.search).get('ch');
+
+  it('starts on the channel in the URL', async () => {
+    at('/?ch=pac-man');
+    render(<App />);
+    expect(await screen.findByRole('button', { name: /Channel 103 Pac-Man/ })).toBeTruthy();
+    expect(ch()).toBe('pac-man');
+  });
+
+  it('falls back to the default for a channel it doesn\'t know', async () => {
+    at('/?ch=nope');
+    render(<App />);
+    expect(await screen.findByRole('button', { name: /Channel 102 Cycle 2/ })).toBeTruthy();
+    await waitFor(() => expect(ch()).toBeNull());
+  });
+
+  it('keeps the URL plain for the default channel', async () => {
+    render(<App />);
+    await screen.findByRole('button', { name: /Channel 102 Cycle 2/ });
+    expect(window.location.search).toBe('');
+  });
+
+  it('follows the channel as it changes, without adding history', async () => {
+    const length = window.history.length;
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /Channel 102/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Pac-Man/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tune in' }));
+    await waitFor(() => expect(ch()).toBe('pac-man'));
+    expect(window.history.length).toBe(length);
+
+    fireEvent.click(screen.getByRole('button', { name: /Channel 103/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Cycle 2/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tune in' }));
+    await waitFor(() => expect(ch()).toBeNull());
+  });
+
+  it('keeps the channel across pages', async () => {
+    at('/?ch=pac-man');
+    render(<App />);
+    fireEvent.click(await screen.findByRole('link', { name: 'FAQ' }));
+    await screen.findByText('Frequently Assumed Questions');
+    await waitFor(() => expect(window.location.pathname).toBe('/faq'));
+    await waitFor(() => expect(ch()).toBe('pac-man'));
   });
 });
 

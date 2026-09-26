@@ -19,7 +19,7 @@ import { StorageManager } from '../machines/adaptor/storage-manager';
 import { folderCopies } from './folder-settings';
 import { StorageContext, useFolderStorage } from './use-folder-storage';
 import { ConfigContext, channelFromEntry } from './config-context';
-import { parseChannelList } from './channel-list';
+import { channelFromUrl, parseChannelList, setChannelInUrl } from './channel-list';
 import { AdaptorContext } from './adaptor-context';
 
 import Header from './header';
@@ -87,17 +87,30 @@ const App = () => {
       .then(data => setConfig(config => {
         const { categories, channels } = parseChannelList(data);
         // The list can mark a default; otherwise start with the first entry.
-        const entry = channels.find(c => c.default) ?? channels[0];
+        const fallback = channels.find(c => c.default) ?? channels[0];
+        // Start on the channel in the URL, if there's one we know.
+        const requested = channelFromUrl();
+        const entry = channels.find(c => c.value === requested) ?? fallback;
         return entry ? {
           ...config,
           channelCategories: categories,
           channelList: channels,
+          defaultChannelValue: fallback.value,
           channelValue: entry.value,
           channel: channelFromEntry(config, entry),
         } : config;
       }))
       .catch(e => console.error('could not load channel list:', e));
   }, [config.channelsUrl]);
+
+  // Keep the channel in the URL, except for the default, so plain links
+  // follow whatever the default is. Also done after moving between pages,
+  // since links like /faq don't carry it.
+  const syncChannelUrl = () => {
+    if (!config.channelList) return;
+    setChannelInUrl(config.channelValue === config.defaultChannelValue ? null : config.channelValue);
+  };
+  useEffect(syncChannelUrl, [config.channelList, config.channelValue, config.defaultChannelValue]);
 
   return (
     <ConfigContext.Provider value={[config, setConfig]}>
@@ -106,7 +119,7 @@ const App = () => {
           <div id="app">
             <Header />
             <main>
-              <Router>
+              <Router onChange={syncChannelUrl}>
                 <Home path="/" />
                 <Faq path="/faq" />
               </Router>
