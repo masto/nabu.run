@@ -46,10 +46,32 @@
 }
 
 .header .controls {
+  --control-height: 1.8rem;
   display: flex;
   align-items: center;
   min-width: 0;
   padding: 0 0.5rem;
+}
+
+/* A control with a small caption above it. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  margin-right: 20px;
+}
+
+.caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* A fixed height, so captions line up whatever's in them (like the ?). */
+  height: 16px;
+  font-size: 9pt;
+  color: var(--nabu-cyan);
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 
 div.ports {
@@ -79,9 +101,8 @@ button.port:disabled {
   align-items: center;
   gap: 12px;
   min-width: 0;
-  height: 3rem;
+  height: var(--control-height);
   box-sizing: border-box;
-  margin-right: 20px;
   padding: 0 14px 0 8px;
   border: 2px solid var(--nabu-gray);
   border-radius: 10px;
@@ -121,8 +142,15 @@ button.port:disabled {
 }
 
 @media (max-width: 639px) {
-  .channel {
+  .field {
     margin-right: 8px;
+  }
+
+  .caption {
+    display: none;
+  }
+
+  .channel {
     padding: 0 8px;
   }
 
@@ -210,4 +238,140 @@ button.port:disabled {
 .dialogActions button[type="button"] {
   background: var(--nabu-gray);
   color: var(--nabu-black);
+}
+
+/* Storage: temporary, or a local folder. */
+
+.header a.help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 8pt;
+  line-height: 1;
+  color: var(--nabu-cyan);
+}
+
+.segments {
+  display: flex;
+  height: var(--control-height);
+  box-sizing: border-box;
+  border: 2px solid var(--nabu-gray);
+  border-radius: 10px;
+  overflow: hidden;
+  font-family: "ModeSeven", "Helvetica Neue", arial, sans-serif;
+  font-size: 13pt;
+}
+
+.segment {
+  padding: 2px 14px 0;
+  border: none;
+  font: inherit;
+  white-space: nowrap;
+  color: var(--nabu-white);
+  background: transparent;
+  cursor: pointer;
+}
+
+.temporary {
+  background: var(--nabu-light-blue);
+}
+
+.temporary[aria-pressed="true"] {
+  color: var(--nabu-black);
+  background: var(--nabu-light-yellow);
+}
+
+/* The folder button and its change button share one background. */
+.folderPart {
+  display: flex;
+  align-items: stretch;
+  min-width: 9em;
+  border-left: 2px solid var(--nabu-gray);
+  background: var(--nabu-light-blue);
+}
+
+.folderPart .segment {
+  flex: 1;
+}
+
+.folderPart.on {
+  background: var(--nabu-dark-green);
+}
+
+.folderPart.disabled {
+  opacity: 0.5;
+}
+
+.segment:disabled {
+  cursor: not-allowed;
+}
+
+.segment q {
+  quotes: '"' '"';
+}
+
+button.changeFolder {
+  display: flex;
+  align-items: center;
+  padding: 0 12px 0 2px;
+  border: none;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+button.changeFolder svg {
+  fill: none;
+  stroke: var(--nabu-white);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+button.changeFolder:hover svg,
+button.changeFolder:focus-visible svg {
+  stroke: var(--nabu-cyan);
+}
+
+/* Reconnecting is the thing to do; make sure it's noticed. */
+.attention {
+  animation: attention 1.6s ease-in-out infinite;
+}
+
+@keyframes attention {
+  50% { background: var(--nabu-dark-green); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attention {
+    animation: none;
+    background: var(--nabu-dark-green);
+  }
+
+  .attention .segment {
+    text-decoration: underline;
+  }
+}
+
+@media (max-width: 639px) {
+  .segments {
+    font-size: 8pt;
+  }
+
+  .segment {
+    padding: 2px 6px 0;
+  }
+
+  .folderPart {
+    min-width: 0;
+  }
+
+  button.changeFolder {
+    padding: 0 6px 0 0;
+  }
 }

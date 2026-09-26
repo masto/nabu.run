@@ -59,7 +59,7 @@ export const fakeNabu = () => {
 
 export const pakChannel = { baseUrl: 'https://example.test/', imageDir: 'cycle', imageName: null };
 
-export const startAdaptor = (files, channel = pakChannel) => {
+export const startAdaptor = (files, channel = pakChannel, context = {}) => {
   // Files are keyed by their path in the channel's directory.
   const prefix = `${channel.baseUrl}${channel.imageDir}/`;
   vi.stubGlobal('fetch', vi.fn(async url => {
@@ -76,6 +76,7 @@ export const startAdaptor = (files, channel = pakChannel) => {
     port: nabu.port,
     portInfo: 'test',
     getChannel: () => channel,
+    ...context,
   });
   return nabu;
 };

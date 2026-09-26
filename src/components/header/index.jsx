@@ -8,6 +8,7 @@ import { ChannelGuide } from '../channel-guide';
 import { NabuIcon } from '../channel-guide/nabu-icon';
 
 import { WebSocketDialog } from './websocket-dialog';
+import { StorageControl } from './storage-control';
 
 function SerialButton(props) {
   const { current, send } = props;
@@ -89,6 +90,7 @@ const Header = () => {
         <img src="/assets/nabu-run.svg" alt="nabu.run logo" height="64" />
       </a>
       <div class={style.controls}>
+        {currentEntry?.storage === 'folder' ? <StorageControl /> : ''}
         {currentEntry ?
           <ChannelButton entry={currentEntry} open={guideOpen}
             onClick={() => setGuideOpen(true)} />
@@ -114,15 +116,18 @@ function ChannelButton(props) {
   const { entry, open, onClick } = props;
 
   return (
-    <button class={style.channel} onClick={onClick}
-      aria-haspopup="dialog" aria-expanded={open ? 'true' : 'false'}>
-      <NabuIcon icon={entry.icon} />
-      <span class={style.channelText}>
-        <span class={style.channelNumber}>Channel {entry.number}</span>
-        <span class={style.channelLabel}>{entry.label}</span>
-      </span>
-      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 6l6 6 6-6" /></svg>
-    </button>
+    <div class={style.field}>
+      <span class={style.caption} aria-hidden="true">Select channel</span>
+      <button class={style.channel} onClick={onClick}
+        aria-haspopup="dialog" aria-expanded={open ? 'true' : 'false'}>
+        <NabuIcon icon={entry.icon} />
+        <span class={style.channelText}>
+          <span class={style.channelNumber}>Channel {entry.number}</span>
+          <span class={style.channelLabel}>{entry.label}</span>
+        </span>
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 6l6 6 6-6" /></svg>
+      </button>
+    </div>
   );
 }
 

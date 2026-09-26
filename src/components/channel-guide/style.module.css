@@ -449,3 +449,16 @@
     overflow: visible;
   }
 }
+
+.tag {
+  display: inline-block;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 2px 8px 0;
+  border: 1px solid var(--nabu-light-green);
+  border-radius: 8px;
+  font-size: 9pt;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--nabu-light-green);
+}

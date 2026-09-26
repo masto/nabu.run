@@ -313,6 +313,8 @@ const handlers = {
     if (handle) {
       delete session.handles[fd];
       status(ctx, handle.name, `Close {${fd}} ${baseName(handle.name)}`);
+      // Files in a folder are written back when they're closed.
+      handle.file?.close?.()?.catch(e => ctx.log(`writing ${handle.name}: ${e.message}`));
     }
     return null;
   },

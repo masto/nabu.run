@@ -15,7 +15,9 @@ import { useState, useEffect } from 'preact/hooks';
 import { useMachine } from './use-machine';
 
 import adaptorMachine from '../machines/adaptor';
-import { MemoryStorage } from '../machines/adaptor/nhacp-storage';
+import { StorageManager } from '../machines/adaptor/storage-manager';
+import { folderCopies } from './folder-settings';
+import { StorageContext, useFolderStorage } from './use-folder-storage';
 import { ConfigContext, channelFromEntry } from './config-context';
 import { parseChannelList } from './channel-list';
 import { AdaptorContext } from './adaptor-context';
@@ -63,11 +65,17 @@ const App = () => {
   const [config, setConfig] = useState(initConfig);
   useEffect(() => syncConfig(config), [config]);
 
+  // Files the NABU opens and writes over NHACP: in memory for the life of
+  // the page, or in a local folder the user chooses.
+  const [storage] = useState(() => new StorageManager({
+    getChannel: () => extern_config.channel,
+    copies: folderCopies,
+  }));
+  const folderStorage = useFolderStorage(storage, config.channel);
+
   const adaptor = useMachine(adaptorMachine, {
     serial: navigator.serial,
-    // Files the NABU opens and writes over NHACP. Kept for the life of the
-    // page, across NABU resets and reconnects.
-    storage: new MemoryStorage(),
+    storage,
     getChannel: () => extern_config.channel,
     rnProxyUrl: config.rnProxyUrl,
     ...(import.meta.env.DEV ? { log: (...a) => console.log(...a) } : {})
@@ -94,15 +102,17 @@ const App = () => {
   return (
     <ConfigContext.Provider value={[config, setConfig]}>
       <AdaptorContext.Provider value={adaptor}>
-        <div id="app">
-          <Header />
-          <main>
-            <Router>
-              <Home path="/" />
-              <Faq path="/faq" />
-            </Router>
-          </main>
-        </div>
+        <StorageContext.Provider value={folderStorage}>
+          <div id="app">
+            <Header />
+            <main>
+              <Router>
+                <Home path="/" />
+                <Faq path="/faq" />
+              </Router>
+            </main>
+          </div>
+        </StorageContext.Provider>
       </AdaptorContext.Provider>
     </ConfigContext.Provider>
   );

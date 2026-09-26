@@ -326,6 +326,9 @@ function ChannelDetails(props) {
       </div>
       <h3>{entry.label}</h3>
       {entry.author ? <div>by {entry.author}</div> : ''}
+      {entry.storage === 'folder' ?
+        <div class={style.tag} title="This channel can keep its files in a folder on your computer">Local storage</div>
+        : ''}
       <p class={style.description}>{entry.description}</p>
       <div class={style.file}>{imageName ? `${imageDir}/${imageName}` : imageDir}</div>
       {current ?
