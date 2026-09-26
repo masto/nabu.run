@@ -168,7 +168,7 @@ describe('storage', () => {
 
     expect((await open(nabu, 'DISK.IMG')).u32(1)).toBe(1000);
     expect(dataOf(await getBlock(nabu, 0, 0, 128))).toEqual(fill(128, 0x55));
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls.filter(([url]) => url.endsWith('/DISK.IMG'))).toHaveLength(1);
   });
 
   it('refuses writes to read-only descriptors', async () => {
@@ -247,12 +247,177 @@ describe('everything else', () => {
     expect(new TextDecoder().decode(Uint8Array.from(again.bytes.slice(3, 3 + again.u8(2))))).toBe('no such file');
   });
 
-  it('refuses requests it does not support yet', async () => {
-    expectError(await request(nabu, 0, NABU.NHACP_REQUEST_LIST_DIR, 0, str('')), NABU.NHACP_ERROR_ENOTSUP);
+  it('refuses unknown requests', async () => {
     expectError(await request(nabu, 0, 0x7e), NABU.NHACP_ERROR_ENOTSUP);
   });
 
   it('refuses truncated requests', async () => {
     expectError(await request(nabu, 0, NABU.NHACP_REQUEST_STORAGE_GET_BLOCK, 0, u16(1)), NABU.NHACP_ERROR_EINVAL);
+  });
+});
+
+// Add an index.json to each directory, as the catalog's make-index.py does.
+const withIndexes = files => {
+  const dirs = new Map([['', new Map()]]);
+  for (const [path, data] of Object.entries(files)) {
+    const parts = path.split('/');
+    parts.forEach((name, i) => {
+      const dir = parts.slice(0, i).join('/');
+      if (!dirs.has(dir)) dirs.set(dir, new Map());
+      dirs.get(dir).set(name, i < parts.length - 1 ?
+        { name, dir: true } :
+        { name, size: data.length, mtime: '2023-02-25T20:24:32Z' });
+    });
+  }
+  const out = { ...files };
+  for (const [dir, entries] of dirs) {
+    out[dir ? `${dir}/index.json` : 'index.json'] =
+      new TextEncoder().encode(JSON.stringify({ entries: [...entries.values()] }));
+  }
+  return out;
+};
+
+describe('directories', () => {
+  const nfs = { baseUrl: 'https://example.test/', imageDir: 'nfs', imageName: null };
+  const text = s => new TextEncoder().encode(s);
+  const tree = withIndexes({
+    'A0/asm.com': text('assembler'),
+    'A0/CPM22.SYS': text('system'),
+    'A0/README.TXT': text('read me'),
+    'B1/GAME.COM': text('game'),
+  });
+
+  beforeEach(async () => {
+    vi.unstubAllGlobals();
+    nabu = startAdaptor(tree, nfs);
+    await hello(nabu);
+  });
+
+  const O_DIR = NABU.NHACP_O_DIRECTORY;
+  const O_NEW = NABU.NHACP_O_RDWR | NABU.NHACP_O_CREAT | NABU.NHACP_O_EXCL;
+
+  // Everything in a directory, as { name, dir, size }.
+  const listing = async (dir, pattern = '', maxLength = 32) => {
+    const opened = await open(nabu, dir, O_DIR, 9);
+    expect(opened.type).toBe(NABU.NHACP_RESPONSE_STORAGE_LOADED);
+    expect((await request(nabu, 0, NABU.NHACP_REQUEST_LIST_DIR, 9, str(pattern))).type).toBe(NABU.NHACP_RESPONSE_OK);
+    const entries = [];
+    for (;;) {
+      const res = await request(nabu, 0, NABU.NHACP_REQUEST_GET_DIR_ENTRY, 9, maxLength);
+      if (res.type === NABU.NHACP_RESPONSE_OK) break;
+      expect(res.type).toBe(NABU.NHACP_RESPONSE_FILE_INFO);
+      entries.push({
+        name: new TextDecoder().decode(Uint8Array.from(res.bytes.slice(21, 21 + res.u8(20)))),
+        dir: Boolean(res.u16(14) & NABU.NHACP_ATTR_DIR),
+        size: res.u32(16),
+      });
+    }
+    send(nabu, 0, NABU.NHACP_REQUEST_FILE_CLOSE, 9);
+    return entries;
+  };
+  const names = async (...args) => (await listing(...args)).map(e => e.name);
+
+  const readAll = async name => {
+    const res = await open(nabu, name, 0, 5);
+    expect(res.type).toBe(NABU.NHACP_RESPONSE_STORAGE_LOADED);
+    const data = dataOf(await request(nabu, 0, NABU.NHACP_REQUEST_STORAGE_GET, 5, u32(0), u16(1000)));
+    send(nabu, 0, NABU.NHACP_REQUEST_FILE_CLOSE, 5);
+    return new TextDecoder().decode(Uint8Array.from(data));
+  };
+
+  it('lists the top-level directory', async () => {
+    expect(await listing('')).toEqual([
+      { name: 'A0', dir: true, size: 0 },
+      { name: 'B1', dir: true, size: 0 },
+    ]);
+  });
+
+  it('lists a directory, keeping the case of names', async () => {
+    expect(await listing('A0')).toEqual([
+      { name: 'asm.com', dir: false, size: 9 },
+      { name: 'CPM22.SYS', dir: false, size: 6 },
+      { name: 'README.TXT', dir: false, size: 7 },
+    ]);
+  });
+
+  it('filters with a pattern, ignoring case', async () => {
+    expect(await names('A0', '*.COM')).toEqual(['asm.com']);
+    expect(await names('A0', '?????.*')).toEqual(['CPM22.SYS']);
+    expect(await names('a0', '[ar]*')).toEqual(['asm.com', 'README.TXT']);
+  });
+
+  it('truncates names to the requested length', async () => {
+    expect(await names('A0', '', 4)).toEqual(['asm.', 'CPM2', 'READ']);
+  });
+
+  it('opens files without regard to case', async () => {
+    expect(await readAll('A0/ASM.COM')).toBe('assembler');
+    expect(await readAll('a0/readme.txt')).toBe('read me');
+  });
+
+  it('tells files and directories apart', async () => {
+    expectError(await open(nabu, 'A0/asm.com', O_DIR), NABU.NHACP_ERROR_ENOTDIR);
+    expectError(await open(nabu, 'A0'), NABU.NHACP_ERROR_EISDIR);
+    expectError(await open(nabu, 'C0', O_DIR), NABU.NHACP_ERROR_ENOENT);
+    await open(nabu, 'A0/asm.com', 0, 3);
+    expectError(await request(nabu, 0, NABU.NHACP_REQUEST_LIST_DIR, 3, str('')), NABU.NHACP_ERROR_ENOTDIR);
+  });
+
+  it('creates files, and any directories they need', async () => {
+    expect((await open(nabu, 'A0/NEW.TXT', O_NEW, 3)).type).toBe(NABU.NHACP_RESPONSE_STORAGE_LOADED);
+    await request(nabu, 0, NABU.NHACP_REQUEST_STORAGE_PUT, 3, u32(0), u16(5), [...text('hello')]);
+    expect(await listing('A0')).toContainEqual({ name: 'NEW.TXT', dir: false, size: 5 });
+
+    expect((await open(nabu, 'A3/NOTE.TXT', O_NEW, 4)).type).toBe(NABU.NHACP_RESPONSE_STORAGE_LOADED);
+    expect(await names('')).toEqual(['A0', 'A3', 'B1']);
+    expect(await names('A3')).toEqual(['NOTE.TXT']);
+
+    expectError(await open(nabu, 'a0/ASM.COM', O_NEW), NABU.NHACP_ERROR_EEXIST);
+  });
+
+  it('removes files and empty directories', async () => {
+    const remove = (name, flags = 0) => request(nabu, 0, NABU.NHACP_REQUEST_REMOVE, u16(flags), str(name));
+    expect((await remove('A0/README.TXT')).type).toBe(NABU.NHACP_RESPONSE_OK);
+    expect(await names('A0')).toEqual(['asm.com', 'CPM22.SYS']);
+    expectError(await open(nabu, 'A0/README.TXT'), NABU.NHACP_ERROR_ENOENT);
+    expectError(await remove('A0/README.TXT'), NABU.NHACP_ERROR_ENOENT);
+
+    expectError(await remove('B1', 1), NABU.NHACP_ERROR_ENOTEMPTY);
+    expectError(await remove('B1'), NABU.NHACP_ERROR_EISDIR);
+    await remove('B1/GAME.COM');
+    expect((await remove('B1', 1)).type).toBe(NABU.NHACP_RESPONSE_OK);
+    expect(await names('')).toEqual(['A0']);
+  });
+
+  it('renames files, replacing any existing one', async () => {
+    const rename = (from, to) => request(nabu, 0, NABU.NHACP_REQUEST_RENAME, str(from), str(to));
+    expect((await rename('A0/README.TXT', 'A0/NOTES.TXT')).type).toBe(NABU.NHACP_RESPONSE_OK);
+    expect(await names('A0')).toEqual(['asm.com', 'CPM22.SYS', 'NOTES.TXT']);
+    expect(await readAll('A0/NOTES.TXT')).toBe('read me');
+
+    await rename('A0/NOTES.TXT', 'A0/ASM.COM');
+    expect(await listing('A0')).toEqual([
+      { name: 'ASM.COM', dir: false, size: 7 },
+      { name: 'CPM22.SYS', dir: false, size: 6 },
+    ]);
+    expect(await readAll('A0/asm.com')).toBe('read me');
+
+    await rename('B1/GAME.COM', 'E0/GAME.COM');
+    expect(await names('E0')).toEqual(['GAME.COM']);
+    expectError(await rename('A0/NOPE', 'A0/X'), NABU.NHACP_ERROR_ENOENT);
+  });
+
+  it('makes directories', async () => {
+    const mkdir = name => request(nabu, 0, NABU.NHACP_REQUEST_MKDIR, str(name));
+    expect((await mkdir('F0')).type).toBe(NABU.NHACP_RESPONSE_OK);
+    expect(await listing('F0')).toEqual([]);
+    expectError(await mkdir('a0'), NABU.NHACP_ERROR_EEXIST);
+  });
+
+  it('keeps changes across a NABU restart', async () => {
+    await open(nabu, 'A0/NEW.TXT', O_NEW, 3);
+    await request(nabu, 0, NABU.NHACP_REQUEST_REMOVE, u16(0), str('A0/asm.com'));
+    await hello(nabu);
+    expect(await names('A0')).toEqual(['CPM22.SYS', 'NEW.TXT', 'README.TXT']);
   });
 });

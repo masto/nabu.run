@@ -127,12 +127,33 @@ const dateTime = (response, d) => response.data(new TextEncoder().encode(
   pad(d.getFullYear(), 4) + pad(d.getMonth() + 1, 2) + pad(d.getDate(), 2) +
   pad(d.getHours(), 2) + pad(d.getMinutes(), 2) + pad(d.getSeconds(), 2)));
 
-const fileAttrs = (response, handle) => {
-  dateTime(response, handle.file.mtime);
-  const writable = handle.access !== NABU.NHACP_O_RDONLY;
+// FILE-ATTRS for { mtime, size, dir, writable }.
+const fileAttrs = (response, { mtime, size, dir, writable }) => {
+  dateTime(response, mtime);
   return response
-    .u16(NABU.NHACP_ATTR_RD | (writable ? NABU.NHACP_ATTR_WR : 0))
-    .u32(handle.file.size);
+    .u16(NABU.NHACP_ATTR_RD |
+      (writable ? NABU.NHACP_ATTR_WR : 0) |
+      (dir ? NABU.NHACP_ATTR_DIR : 0))
+    .u32(dir ? 0 : size);
+};
+
+// A glob pattern (*, ?, [...]) as a case-insensitive RegExp.
+const globToRegExp = pattern => {
+  let re = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === '*') re += '.*';
+    else if (c === '?') re += '.';
+    else if (c === '[' && pattern.indexOf(']', i + 2) !== -1) {
+      const end = pattern.indexOf(']', i + 2);
+      let set = pattern.slice(i + 1, end).replace(/\\/g, '\\\\');
+      if (set[0] === '!') set = '^' + set.slice(1);
+      re += `[${set}]`;
+      i = end;
+    }
+    else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${re}$`, 'i');
 };
 
 // File names are relative to the current channel's directory, unless
@@ -155,8 +176,21 @@ const newSession = () => ({ handles: [], lastError: null });
 const getHandle = (session, fd) =>
   session.handles[fd] ?? fail(NABU.NHACP_ERROR_EBADF, `fdesc ${fd} is not open`);
 
-const writableHandle = (session, fd) => {
+// Handles are files ({ file, access, cursor }) or directories ({ url }).
+const fileHandle = (session, fd) => {
   const handle = getHandle(session, fd);
+  if (handle.dir) fail(NABU.NHACP_ERROR_EISDIR, `fdesc ${fd} is a directory`);
+  return handle;
+};
+
+const dirHandle = (session, fd) => {
+  const handle = getHandle(session, fd);
+  if (!handle.dir) fail(NABU.NHACP_ERROR_ENOTDIR, `fdesc ${fd} is not a directory`);
+  return handle;
+};
+
+const writableHandle = (session, fd) => {
+  const handle = fileHandle(session, fd);
   if (handle.access === NABU.NHACP_O_RDONLY) {
     fail(NABU.NHACP_ERROR_EBADF, `fdesc ${fd} is not open for writing`);
   }
@@ -168,6 +202,8 @@ const checkLength = length => {
     fail(NABU.NHACP_ERROR_EINVAL, `length ${length} exceeds ${NABU.NHACP_MAX_DATA}`);
   }
 };
+
+const storageOf = ctx => ctx.storage ??= new MemoryStorage();
 
 const status = (ctx, name, message) => {
   ctx.log(message);
@@ -219,7 +255,6 @@ const handlers = {
 
     const access = flags & NABU.NHACP_O_ACCMODE;
     if (access > NABU.NHACP_O_RDWP) fail(NABU.NHACP_ERROR_EINVAL, `bad access mode ${access}`);
-    if (flags & NABU.NHACP_O_DIRECTORY) fail(NABU.NHACP_ERROR_ENOTSUP, 'directories are not supported');
 
     let fd = reqFd;
     if (fd === 0xff) {
@@ -231,32 +266,40 @@ const handlers = {
       fail(NABU.NHACP_ERROR_EBUSY, `fdesc ${fd} is in use`);
     }
 
-    status(ctx, name, `Open {${fd}} = ${baseName(name)} (${flags})`);
-    ctx.storage ??= new MemoryStorage();
-    const { file } = await ctx.storage.open(resolveUrl(ctx, name), {
+    status(ctx, name, `Open {${fd}} = ${baseName(name) || '/'} (${flags})`);
+    // An empty name is the channel's top-level directory.
+    const url = resolveUrl(ctx, name);
+
+    if (flags & NABU.NHACP_O_DIRECTORY) {
+      await storageOf(ctx).openDirectory(url);
+      session.handles[fd] = { name, url, dir: true };
+      return new Response(NABU.NHACP_RESPONSE_STORAGE_LOADED).u8(fd).u32(0);
+    }
+
+    const { file } = await storageOf(ctx).openFile(url, {
       create: Boolean(flags & NABU.NHACP_O_CREAT),
       exclusive: Boolean(flags & NABU.NHACP_O_EXCL),
     });
-    if (flags & NABU.NHACP_O_TRUNC && access !== NABU.NHACP_O_RDONLY) file.setSize(0);
+    if (flags & NABU.NHACP_O_TRUNC && access !== NABU.NHACP_O_RDONLY) await file.setSize(0);
 
     session.handles[fd] = { name, file, access, cursor: 0 };
     return new Response(NABU.NHACP_RESPONSE_STORAGE_LOADED).u8(fd).u32(file.size);
   },
 
-  [NABU.NHACP_REQUEST_STORAGE_GET]: (ctx, session, req) => {
+  [NABU.NHACP_REQUEST_STORAGE_GET]: async (ctx, session, req) => {
     const fd = req.u8();
     const offset = req.u32();
     const length = req.u16();
     checkLength(length);
-    return dataBuffer(getHandle(session, fd).file.read(offset, length));
+    return dataBuffer(await fileHandle(session, fd).file.read(offset, length));
   },
 
-  [NABU.NHACP_REQUEST_STORAGE_PUT]: (ctx, session, req) => {
+  [NABU.NHACP_REQUEST_STORAGE_PUT]: async (ctx, session, req) => {
     const fd = req.u8();
     const offset = req.u32();
     const length = req.u16();
     checkLength(length);
-    writableHandle(session, fd).file.write(offset, req.data(length));
+    await writableHandle(session, fd).file.write(offset, req.data(length));
     return ok();
   },
 
@@ -283,51 +326,51 @@ const handlers = {
     return errorResponse(code, message.slice(0, maxLength));
   },
 
-  [NABU.NHACP_REQUEST_STORAGE_GET_BLOCK]: (ctx, session, req) => {
+  [NABU.NHACP_REQUEST_STORAGE_GET_BLOCK]: async (ctx, session, req) => {
     const fd = req.u8();
     const block = req.u32();
     const blockLength = req.u16();
     checkLength(blockLength);
-    const { name, file } = getHandle(session, fd);
+    const { name, file } = fileHandle(session, fd);
     const offset = block * blockLength;
     ctx.log(`read ${baseName(name)} block ${block} (${blockLength})`);
 
     // Past end-of-file is empty; a partial block is zero-padded.
     if (offset >= file.size) return dataBuffer(new Uint8Array(0));
     const data = new Uint8Array(blockLength);
-    data.set(file.read(offset, blockLength));
+    data.set(await file.read(offset, blockLength));
     return dataBuffer(data);
   },
 
-  [NABU.NHACP_REQUEST_STORAGE_PUT_BLOCK]: (ctx, session, req) => {
+  [NABU.NHACP_REQUEST_STORAGE_PUT_BLOCK]: async (ctx, session, req) => {
     const fd = req.u8();
     const block = req.u32();
     const blockLength = req.u16();
     checkLength(blockLength);
     const { name, file } = writableHandle(session, fd);
     ctx.log(`write ${baseName(name)} block ${block} (${blockLength})`);
-    file.write(block * blockLength, req.data(blockLength));
+    await file.write(block * blockLength, req.data(blockLength));
     return ok();
   },
 
-  [NABU.NHACP_REQUEST_FILE_READ]: (ctx, session, req) => {
+  [NABU.NHACP_REQUEST_FILE_READ]: async (ctx, session, req) => {
     const fd = req.u8();
     req.u16(); // flags; none are defined
     const length = req.u16();
     checkLength(length);
-    const handle = getHandle(session, fd);
-    const data = handle.file.read(handle.cursor, length);
+    const handle = fileHandle(session, fd);
+    const data = await handle.file.read(handle.cursor, length);
     handle.cursor += data.length;
     return dataBuffer(data);
   },
 
-  [NABU.NHACP_REQUEST_FILE_WRITE]: (ctx, session, req) => {
+  [NABU.NHACP_REQUEST_FILE_WRITE]: async (ctx, session, req) => {
     const fd = req.u8();
     req.u16(); // flags; none are defined
     const length = req.u16();
     checkLength(length);
     const handle = writableHandle(session, fd);
-    handle.file.write(handle.cursor, req.data(length));
+    await handle.file.write(handle.cursor, req.data(length));
     handle.cursor += length;
     return ok();
   },
@@ -336,7 +379,7 @@ const handlers = {
     const fd = req.u8();
     const offset = req.s32();
     const whence = req.u8();
-    const handle = getHandle(session, fd);
+    const handle = fileHandle(session, fd);
     const origin = {
       [NABU.NHACP_SEEK_SET]: 0,
       [NABU.NHACP_SEEK_CUR]: handle.cursor,
@@ -350,14 +393,64 @@ const handlers = {
 
   [NABU.NHACP_REQUEST_FILE_GET_INFO]: (ctx, session, req) => {
     const handle = getHandle(session, req.u8());
+    const attrs = handle.dir ?
+      { mtime: new Date(), size: 0, dir: true, writable: true } :
+      { mtime: handle.file.mtime, size: handle.file.size, writable: handle.access !== NABU.NHACP_O_RDONLY };
     // The name is omitted for FILE-GET-INFO.
-    return fileAttrs(new Response(NABU.NHACP_RESPONSE_FILE_INFO), handle).string('');
+    return fileAttrs(new Response(NABU.NHACP_RESPONSE_FILE_INFO), attrs).string('');
   },
 
-  [NABU.NHACP_REQUEST_FILE_SET_SIZE]: (ctx, session, req) => {
+  [NABU.NHACP_REQUEST_FILE_SET_SIZE]: async (ctx, session, req) => {
     const fd = req.u8();
     const size = req.u32();
-    writableHandle(session, fd).file.setSize(size);
+    await writableHandle(session, fd).file.setSize(size);
+    return ok();
+  },
+
+  [NABU.NHACP_REQUEST_LIST_DIR]: async (ctx, session, req) => {
+    const fd = req.u8();
+    const pattern = req.string();
+    const handle = dirHandle(session, fd);
+    const match = pattern ? globToRegExp(pattern) : null;
+    handle.listing = (await storageOf(ctx).list(handle.url))
+      .filter(entry => !match || match.test(entry.name));
+    handle.next = 0;
+    ctx.log(`list ${handle.name || '/'} ${pattern}: ${handle.listing.length} entries`);
+    return ok();
+  },
+
+  [NABU.NHACP_REQUEST_GET_DIR_ENTRY]: (ctx, session, req) => {
+    const fd = req.u8();
+    const maxLength = req.u8();
+    const handle = dirHandle(session, fd);
+    // The end of the listing (or no listing) is OK.
+    const entry = handle.listing?.[handle.next];
+    if (!entry) return ok();
+    handle.next++;
+    return fileAttrs(new Response(NABU.NHACP_RESPONSE_FILE_INFO), { ...entry, writable: true })
+      .string(entry.name.slice(0, maxLength));
+  },
+
+  [NABU.NHACP_REQUEST_REMOVE]: async (ctx, session, req) => {
+    const flags = req.u16();
+    const name = req.string();
+    status(ctx, name, `Remove ${name}`);
+    await storageOf(ctx).remove(resolveUrl(ctx, name), { directory: Boolean(flags & 1) });
+    return ok();
+  },
+
+  [NABU.NHACP_REQUEST_RENAME]: async (ctx, session, req) => {
+    const from = req.string();
+    const to = req.string();
+    status(ctx, to, `Rename ${from} to ${to}`);
+    await storageOf(ctx).rename(resolveUrl(ctx, from), resolveUrl(ctx, to));
+    return ok();
+  },
+
+  [NABU.NHACP_REQUEST_MKDIR]: async (ctx, session, req) => {
+    const name = req.string();
+    status(ctx, name, `Make directory ${name}`);
+    await storageOf(ctx).mkdir(resolveUrl(ctx, name));
     return ok();
   },
 

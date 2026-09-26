@@ -60,10 +60,11 @@ export const fakeNabu = () => {
 export const pakChannel = { baseUrl: 'https://example.test/', imageDir: 'cycle', imageName: null };
 
 export const startAdaptor = (files, channel = pakChannel) => {
+  // Files are keyed by their path in the channel's directory.
+  const prefix = `${channel.baseUrl}${channel.imageDir}/`;
   vi.stubGlobal('fetch', vi.fn(async url => {
-    const name = url.split('/').pop();
-    if (!files[name]) return { ok: false, status: 404 };
-    const data = files[name];
+    const data = url.startsWith(prefix) && files[url.slice(prefix.length)];
+    if (!data) return { ok: false, status: 404 };
     return {
       ok: true,
       arrayBuffer: async () =>
