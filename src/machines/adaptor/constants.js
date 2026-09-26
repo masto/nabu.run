@@ -122,15 +122,66 @@ export const RN_SEEK_END = 3;
 // NHACP
 
 export const MSG_NHACP_REQUEST = 0x8f;
+
+export const NHACP_VERSION = 0x0001; // NHACP 0.1
+export const NHACP_SESSION_SYSTEM = 0x00;
+export const NHACP_SESSION_CREATE = 0xff;
+export const NHACP_MAX_DATA = 8192;
+export const NHACP_MAX_MESSAGE = 8256;
+
 export const NHACP_REQUEST_HELLO = 0x00;
 export const NHACP_REQUEST_STORAGE_OPEN = 0x01;
+export const NHACP_REQUEST_STORAGE_GET = 0x02;
+export const NHACP_REQUEST_STORAGE_PUT = 0x03;
+export const NHACP_REQUEST_GET_DATE_TIME = 0x04;
 export const NHACP_REQUEST_FILE_CLOSE = 0x05;
+export const NHACP_REQUEST_GET_ERROR_DETAILS = 0x06;
 export const NHACP_REQUEST_STORAGE_GET_BLOCK = 0x07;
+export const NHACP_REQUEST_STORAGE_PUT_BLOCK = 0x08;
+export const NHACP_REQUEST_FILE_READ = 0x09;
+export const NHACP_REQUEST_FILE_WRITE = 0x0a;
+export const NHACP_REQUEST_FILE_SEEK = 0x0b;
+export const NHACP_REQUEST_FILE_GET_INFO = 0x0c;
+export const NHACP_REQUEST_FILE_SET_SIZE = 0x0d;
+export const NHACP_REQUEST_LIST_DIR = 0x0e;
+export const NHACP_REQUEST_GET_DIR_ENTRY = 0x0f;
+export const NHACP_REQUEST_REMOVE = 0x10;
+export const NHACP_REQUEST_RENAME = 0x11;
+export const NHACP_REQUEST_MKDIR = 0x12;
+export const NHACP_REQUEST_GOODBYE = 0xef;
+
 export const NHACP_RESPONSE_SESSION_STARTED = 0x80;
 export const NHACP_RESPONSE_OK = 0x81;
 export const NHACP_RESPONSE_ERROR = 0x82;
 export const NHACP_RESPONSE_STORAGE_LOADED = 0x83;
 export const NHACP_RESPONSE_DATA_BUFFER = 0x84;
+export const NHACP_RESPONSE_DATE_TIME = 0x85;
+export const NHACP_RESPONSE_FILE_INFO = 0x86;
+export const NHACP_RESPONSE_UINT8_VALUE = 0x87;
+export const NHACP_RESPONSE_UINT16_VALUE = 0x88;
+export const NHACP_RESPONSE_UINT32_VALUE = 0x89;
+export const NHACP_RESPONSE_FILE_ATTRS = 0x8a;
+
+// STORAGE-OPEN flags. The low 3 bits are the access mode.
+export const NHACP_O_ACCMODE = 0x0007;
+export const NHACP_O_RDONLY = 0x0000;
+export const NHACP_O_RDWR = 0x0001;
+export const NHACP_O_RDWP = 0x0002;
+export const NHACP_O_DIRECTORY = 0x0008;
+export const NHACP_O_CREAT = 0x0010;
+export const NHACP_O_EXCL = 0x0020;
+export const NHACP_O_TRUNC = 0x0040;
+
+// FILE-ATTRS flags
+export const NHACP_ATTR_RD = 0x0001;
+export const NHACP_ATTR_WR = 0x0002;
+export const NHACP_ATTR_DIR = 0x0004;
+export const NHACP_ATTR_SPEC = 0x0008;
+
+// FILE-SEEK whence
+export const NHACP_SEEK_SET = 0;
+export const NHACP_SEEK_CUR = 1;
+export const NHACP_SEEK_END = 2;
 
 export const NHACP_ERROR_UNDEFINED = 0; // undefined generic error
 export const NHACP_ERROR_ENOTSUP = 1; // Operation is not supported

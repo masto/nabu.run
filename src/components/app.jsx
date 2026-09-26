@@ -15,6 +15,7 @@ import { useState, useEffect } from 'preact/hooks';
 import { useMachine } from './use-machine';
 
 import adaptorMachine from '../machines/adaptor';
+import { MemoryStorage } from '../machines/adaptor/nhacp-storage';
 import { ConfigContext, channelFromEntry } from './config-context';
 import { parseChannelList } from './channel-list';
 import { AdaptorContext } from './adaptor-context';
@@ -64,6 +65,9 @@ const App = () => {
 
   const adaptor = useMachine(adaptorMachine, {
     serial: navigator.serial,
+    // Files the NABU opens and writes over NHACP. Kept for the life of the
+    // page, across NABU resets and reconnects.
+    storage: new MemoryStorage(),
     getChannel: () => extern_config.channel,
     rnProxyUrl: config.rnProxyUrl,
     ...(import.meta.env.DEV ? { log: (...a) => console.log(...a) } : {})
