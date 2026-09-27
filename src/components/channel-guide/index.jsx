@@ -28,6 +28,7 @@ const quote = s => `"${s.replace(/["\\]/g, '\\$&')}"`;
 // The channel guide: search across everything, browse by category, and
 // tune in. Keyboard: Tab and Left/Right move between sections, Up/Down
 // move through the categories and channels, Enter on a channel tunes it.
+// Double-clicking a channel tunes it too.
 export function ChannelGuide(props) {
   const { open, categories, channels, current, recent, onTune, onClose } = props;
 
@@ -279,7 +280,8 @@ export function ChannelGuide(props) {
                 <button type="button" role="option" key={e.value} data-channel={e.value}
                   aria-selected={e === sel ? 'true' : 'false'}
                   tabIndex={e === sel ? 0 : -1}
-                  onClick={() => onChannelClick(e)} onKeyDown={ev => onChannelKey(ev, i)}>
+                  onClick={() => onChannelClick(e)} onDblClick={() => onTune(e.value)}
+                  onKeyDown={ev => onChannelKey(ev, i)}>
                   <span class={style.number}>{e.number}</span>
                   <NabuIcon icon={e.icon} />
                   <span class={style.label}>
