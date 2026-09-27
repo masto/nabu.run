@@ -10,16 +10,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Decides where the NABU's files live for each NHACP request: in the local
+// Decides where the NABU's files live for each request: in the local
 // folder, if the user has chosen one and the current channel can use it,
 // otherwise in memory. Implements the storage interface described in
-// nhacp-storage.js.
+// storage.js.
 //
 // Each channel gets its own subfolder, named after the channel. The first
 // time, the channel's files are copied into it; after that it's left alone.
 
-import * as NABU from './constants';
-import { MemoryStorage, NhacpError } from './nhacp-storage';
+import { MemoryStorage, StorageError } from './storage';
 import { FolderStorage, copyChannel } from './folder-storage';
 
 const findEntry = async (dir, name) => {
@@ -138,8 +137,8 @@ export class StorageManager {
       folder = await this.folderFor(channel);
     }
     catch (e) {
-      throw e instanceof NhacpError ? e :
-        new NhacpError(NABU.NHACP_ERROR_EIO, `preparing the folder: ${e.message}`);
+      throw e instanceof StorageError ? e :
+        new StorageError('EIO', `preparing the folder: ${e.message}`);
     }
     return folder.contains(url) ? folder : this.#memory;
   }
@@ -150,7 +149,7 @@ export class StorageManager {
       return await operation(storage);
     }
     catch (e) {
-      if (e.code === NABU.NHACP_ERROR_EACCES && storage !== this.#memory) {
+      if (e.code === 'EACCES' && storage !== this.#memory) {
         this.#emit({ type: 'error', error: e });
       }
       throw e;
@@ -177,7 +176,7 @@ export class StorageManager {
     const to = await this.#pick(toUrl);
     return this.#run(fromUrl, from => {
       if (from !== to) {
-        throw new NhacpError(NABU.NHACP_ERROR_ENOTSUP, 'can\'t rename between storages');
+        throw new StorageError('ENOTSUP', 'can\'t rename between storages');
       }
       return from.rename(fromUrl, toUrl);
     });

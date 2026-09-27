@@ -55,10 +55,10 @@ describe('FolderStorage', () => {
   });
 
   it('tells files and directories apart', async () => {
-    await expectCode(storage.openFile(`${ROOT}/A0`), NABU.NHACP_ERROR_EISDIR);
-    await expectCode(storage.openDirectory(`${ROOT}/A0/asm.com`), NABU.NHACP_ERROR_ENOTDIR);
-    await expectCode(storage.openDirectory(`${ROOT}/C0`), NABU.NHACP_ERROR_ENOENT);
-    await expectCode(storage.openFile(`${ROOT}/A0/NOPE`), NABU.NHACP_ERROR_ENOENT);
+    await expectCode(storage.openFile(`${ROOT}/A0`), 'EISDIR');
+    await expectCode(storage.openDirectory(`${ROOT}/A0/asm.com`), 'ENOTDIR');
+    await expectCode(storage.openDirectory(`${ROOT}/C0`), 'ENOENT');
+    await expectCode(storage.openFile(`${ROOT}/A0/NOPE`), 'ENOENT');
   });
 
   it('writes changes back after a pause', async () => {
@@ -103,15 +103,15 @@ describe('FolderStorage', () => {
     file.write(0, bytes('new'));
     await file.close();
     expect(dir.at('A5/NEW.TXT').text()).toBe('new');
-    await expectCode(storage.openFile(`${ROOT}/a0/ASM.COM`, { create: true, exclusive: true }), NABU.NHACP_ERROR_EEXIST);
+    await expectCode(storage.openFile(`${ROOT}/a0/ASM.COM`, { create: true, exclusive: true }), 'EEXIST');
   });
 
   it('removes files and empty directories', async () => {
     await storage.remove(`${ROOT}/a0/readme.txt`);
     expect(dir.at('A0/README.TXT')).toBeUndefined();
-    await expectCode(storage.remove(`${ROOT}/A0/README.TXT`), NABU.NHACP_ERROR_ENOENT);
-    await expectCode(storage.remove(`${ROOT}/B1`, { directory: true }), NABU.NHACP_ERROR_ENOTEMPTY);
-    await expectCode(storage.remove(`${ROOT}/B1`), NABU.NHACP_ERROR_EISDIR);
+    await expectCode(storage.remove(`${ROOT}/A0/README.TXT`), 'ENOENT');
+    await expectCode(storage.remove(`${ROOT}/B1`, { directory: true }), 'ENOTEMPTY');
+    await expectCode(storage.remove(`${ROOT}/B1`), 'EISDIR');
     await storage.remove(`${ROOT}/B1/GAME.COM`);
     await storage.remove(`${ROOT}/B1`, { directory: true });
     expect(dir.at('B1')).toBeUndefined();
@@ -146,7 +146,7 @@ describe('FolderStorage', () => {
   it('makes directories', async () => {
     await storage.mkdir(`${ROOT}/F0`);
     expect(dir.at('F0').kind).toBe('directory');
-    await expectCode(storage.mkdir(`${ROOT}/a0`), NABU.NHACP_ERROR_EEXIST);
+    await expectCode(storage.mkdir(`${ROOT}/a0`), 'EEXIST');
   });
 
   it('reports lost permission as EACCES', async () => {
@@ -154,7 +154,7 @@ describe('FolderStorage', () => {
       yield* [];
       throw new DOMException('no', 'NotAllowedError');
     };
-    await expectCode(storage.list(`${ROOT}/A0`), NABU.NHACP_ERROR_EACCES);
+    await expectCode(storage.list(`${ROOT}/A0`), 'EACCES');
   });
 });
 
@@ -296,7 +296,7 @@ describe('StorageManager', () => {
     manager.setRoot(root);
     channel = plain;
     expect(manager.usesFolder()).toBe(false);
-    await expectCode(manager.openDirectory('https://example.test/cycle-2/A0'), NABU.NHACP_ERROR_ENOENT);
+    await expectCode(manager.openDirectory('https://example.test/cycle-2/A0'), 'ENOENT');
     expect(root.children.size).toBe(0);
   });
 
@@ -320,8 +320,8 @@ describe('StorageManager', () => {
       yield* [];
       throw new DOMException('no', 'NotAllowedError');
     };
-    await expectCode(manager.list(`${ROOT}/A0`), NABU.NHACP_ERROR_EACCES);
-    expect(events.filter(e => e.type === 'error').map(e => e.error.code)).toEqual([NABU.NHACP_ERROR_EACCES]);
+    await expectCode(manager.list(`${ROOT}/A0`), 'EACCES');
+    expect(events.filter(e => e.type === 'error').map(e => e.error.code)).toEqual(['EACCES']);
   });
 });
 

@@ -10,7 +10,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Storage for the files and directories the NABU uses over NHACP.
+// Storage for the files and directories the NABU uses, shared by the
+// protocols that give it a file system (NHACP and RetroNET).
 //
 // A storage addresses everything by URL (the channel's directory plus the
 // name the NABU asked for) and provides:
@@ -24,24 +25,23 @@
 //
 // and files with size, mtime, read(offset, length), write(offset, bytes)
 // and setSize(size), any of which may return a promise. Failures are
-// NhacpErrors carrying the NHACP error code. Names are matched without
-// regard to case, keeping the case they were created with.
+// StorageErrors, whose code is a POSIX-style name ('ENOENT', 'EEXIST',
+// 'EISDIR', 'ENOTDIR', 'ENOTEMPTY', 'EACCES', 'EBUSY', 'ENOSPC', 'EINVAL',
+// 'ENOTSUP', 'EIO') that each protocol reports in its own way. Names are
+// matched without regard to case, keeping the case they were created with.
 //
-// MemoryStorage is the only storage so far. A local folder (via the File
-// System Access API) could provide the same interface.
+// MemoryStorage is here; FolderStorage (folder-storage.js) keeps files in a
+// local folder, and StorageManager (storage-manager.js) picks between them.
 
-import * as NABU from './constants';
-
-// Errors that are reported to the NABU as an NHACP ERROR response.
-export class NhacpError extends Error {
+export class StorageError extends Error {
   constructor(code, message) {
-    super(message ?? `NHACP error code ${code}`);
-    this.name = 'NhacpError';
+    super(message ?? code);
+    this.name = 'StorageError';
     this.code = code;
   }
 }
 
-const fail = (code, message) => { throw new NhacpError(code, message); };
+const fail = (code, message) => { throw new StorageError(code, message); };
 
 // A file held in memory. Everything past `size` in the buffer is kept
 // zeroed, so growing the file zero-fills it.
@@ -129,7 +129,7 @@ export class MemoryStorage {
   async openFile(url, { create = false, exclusive = false } = {}) {
     url = trimSlash(url);
     const node = await this.#lookup(url);
-    if (node?.type === 'dir') fail(NABU.NHACP_ERROR_EISDIR, `${url} is a directory`);
+    if (node?.type === 'dir') fail('EISDIR', `${url} is a directory`);
 
     if (node) {
       // An unindexed file may or may not exist; fetching it finds out.
@@ -138,15 +138,15 @@ export class MemoryStorage {
         file = await this.#load(node);
       }
       catch (e) {
-        if (!(node.unindexed && create && e.code === NABU.NHACP_ERROR_ENOENT)) throw e;
+        if (!(node.unindexed && create && e.code === 'ENOENT')) throw e;
       }
       if (file) {
-        if (create && exclusive) fail(NABU.NHACP_ERROR_EEXIST, `${url} already exists`);
+        if (create && exclusive) fail('EEXIST', `${url} already exists`);
         return { file, created: false };
       }
     }
     else if (!create) {
-      fail(NABU.NHACP_ERROR_ENOENT, `${url} not found`);
+      fail('ENOENT', `${url} not found`);
     }
 
     // Create it, along with any missing directories on the way.
@@ -160,8 +160,8 @@ export class MemoryStorage {
     url = trimSlash(url);
     const node = await this.#lookup(url);
     if (node?.type === 'dir') return;
-    if (node && !node.unindexed) fail(NABU.NHACP_ERROR_ENOTDIR, `${url} is not a directory`);
-    fail(NABU.NHACP_ERROR_ENOENT, `${url} not found`);
+    if (node && !node.unindexed) fail('ENOTDIR', `${url} is not a directory`);
+    fail('ENOENT', `${url} not found`);
   }
 
   async list(url) {
@@ -192,13 +192,13 @@ export class MemoryStorage {
   async remove(url, { directory = false } = {}) {
     url = trimSlash(url);
     const node = await this.#lookup(url);
-    if (!node) fail(NABU.NHACP_ERROR_ENOENT, `${url} not found`);
+    if (!node) fail('ENOENT', `${url} not found`);
     if (directory) {
-      if (node.type !== 'dir') fail(NABU.NHACP_ERROR_ENOTDIR, `${url} is not a directory`);
-      if ((await this.list(url)).length) fail(NABU.NHACP_ERROR_ENOTEMPTY, `${url} is not empty`);
+      if (node.type !== 'dir') fail('ENOTDIR', `${url} is not a directory`);
+      if ((await this.list(url)).length) fail('ENOTEMPTY', `${url} is not empty`);
     }
     else {
-      if (node.type === 'dir') fail(NABU.NHACP_ERROR_EISDIR, `${url} is a directory`);
+      if (node.type === 'dir') fail('EISDIR', `${url} is a directory`);
       if (node.unindexed) await this.#load(node);
     }
     this.#changes.set(keyOf(url), { type: 'deleted' });
@@ -208,14 +208,14 @@ export class MemoryStorage {
     fromUrl = trimSlash(fromUrl);
     toUrl = trimSlash(toUrl);
     const from = await this.#lookup(fromUrl);
-    if (!from) fail(NABU.NHACP_ERROR_ENOENT, `${fromUrl} not found`);
-    if (from.type === 'dir') fail(NABU.NHACP_ERROR_ENOTSUP, 'renaming directories is not supported');
+    if (!from) fail('ENOENT', `${fromUrl} not found`);
+    if (from.type === 'dir') fail('ENOTSUP', 'renaming directories is not supported');
     if (from.unindexed) await this.#load(from);
 
     // Renaming onto an existing file replaces it; onto a directory, no.
     if (keyOf(fromUrl) !== keyOf(toUrl)) {
       const to = await this.#lookup(toUrl);
-      if (to?.type === 'dir') fail(NABU.NHACP_ERROR_EISDIR, `${toUrl} is a directory`);
+      if (to?.type === 'dir') fail('EISDIR', `${toUrl} is a directory`);
     }
     await this.#ensureDirectory(parentOf(toUrl));
 
@@ -230,7 +230,7 @@ export class MemoryStorage {
   async mkdir(url) {
     url = trimSlash(url);
     const node = await this.#lookup(url);
-    if (node && !node.unindexed) fail(NABU.NHACP_ERROR_EEXIST, `${url} already exists`);
+    if (node && !node.unindexed) fail('EEXIST', `${url} already exists`);
     await this.#ensureDirectory(parentOf(url));
     this.#changes.set(keyOf(url), { type: 'dir', url });
   }
@@ -282,7 +282,7 @@ export class MemoryStorage {
     const node = await this.#lookup(url);
     // An unindexed path might be a plain directory on the web server.
     if (node?.type === 'dir' || node?.unindexed) return;
-    if (node) fail(NABU.NHACP_ERROR_ENOTDIR, `${url} is not a directory`);
+    if (node) fail('ENOTDIR', `${url} is not a directory`);
     await this.#ensureDirectory(parentOf(url));
     this.#changes.set(keyOf(url), { type: 'dir', url });
   }
@@ -326,13 +326,13 @@ const fetchFile = async url => {
     response = await fetch(url);
   }
   catch (e) {
-    throw new NhacpError(NABU.NHACP_ERROR_EIO, `fetch ${url}: ${e.message}`);
+    throw new StorageError('EIO', `fetch ${url}: ${e.message}`);
   }
   if (response.status === 404) {
-    throw new NhacpError(NABU.NHACP_ERROR_ENOENT, `${url} not found`);
+    throw new StorageError('ENOENT', `${url} not found`);
   }
   if (!response.ok) {
-    throw new NhacpError(NABU.NHACP_ERROR_EIO, `fetch ${url}: ${response.status}`);
+    throw new StorageError('EIO', `fetch ${url}: ${response.status}`);
   }
 
   const lastModified = response.headers?.get?.('Last-Modified');

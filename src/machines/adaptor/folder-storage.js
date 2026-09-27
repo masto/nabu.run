@@ -10,27 +10,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// NHACP storage in a folder on the user's computer, through the File System
-// Access API. Implements the interface described in nhacp-storage.js.
+// Storage in a folder on the user's computer, through the File System
+// Access API. Implements the interface described in storage.js.
 
-import * as NABU from './constants';
-import { MemoryFile, NhacpError } from './nhacp-storage';
+import { MemoryFile, StorageError } from './storage';
 
-const fail = (code, message) => { throw new NhacpError(code, message); };
+const fail = (code, message) => { throw new StorageError(code, message); };
 
-// File System Access errors as NHACP errors.
-const nhacpError = (e, what) => {
-  if (e instanceof NhacpError) return e;
+// File System Access errors as StorageErrors.
+const storageError = (e, what) => {
+  if (e instanceof StorageError) return e;
   const code = {
-    NotFoundError: NABU.NHACP_ERROR_ENOENT,
-    TypeMismatchError: NABU.NHACP_ERROR_ENOTDIR,
-    NotAllowedError: NABU.NHACP_ERROR_EACCES,
-    SecurityError: NABU.NHACP_ERROR_EACCES,
-    InvalidModificationError: NABU.NHACP_ERROR_ENOTEMPTY,
-    NoModificationAllowedError: NABU.NHACP_ERROR_EBUSY,
-    QuotaExceededError: NABU.NHACP_ERROR_ENOSPC,
-  }[e?.name] ?? NABU.NHACP_ERROR_EIO;
-  const error = new NhacpError(code, `${what}: ${e?.name ?? 'Error'}: ${e?.message ?? e}`);
+    NotFoundError: 'ENOENT',
+    TypeMismatchError: 'ENOTDIR',
+    NotAllowedError: 'EACCES',
+    SecurityError: 'EACCES',
+    InvalidModificationError: 'ENOTEMPTY',
+    NoModificationAllowedError: 'EBUSY',
+    QuotaExceededError: 'ENOSPC',
+  }[e?.name] ?? 'EIO';
+  const error = new StorageError(code, `${what}: ${e?.name ?? 'Error'}: ${e?.message ?? e}`);
   error.cause = e;
   return error;
 };
@@ -87,7 +86,7 @@ export class FolderFile extends MemoryFile {
       }
       catch (e) {
         this.dirty = true;
-        throw nhacpError(e, `write ${this.handle.name}`);
+        throw storageError(e, `write ${this.handle.name}`);
       }
     });
     return this.#flushing;
@@ -135,33 +134,33 @@ export class FolderStorage {
 
   async openFile(url, { create = false, exclusive = false } = {}) {
     const parts = this.#parts(url);
-    if (!parts.length) fail(NABU.NHACP_ERROR_EISDIR, `${url} is a directory`);
+    if (!parts.length) fail('EISDIR', `${url} is a directory`);
     const name = parts.pop();
     try {
       const dir = await this.#dir(parts, create);
-      if (!dir) fail(NABU.NHACP_ERROR_ENOENT, `${url} not found`);
+      if (!dir) fail('ENOENT', `${url} not found`);
 
       const existing = await findEntry(dir, name);
-      if (existing?.kind === 'directory') fail(NABU.NHACP_ERROR_EISDIR, `${url} is a directory`);
-      if (existing && create && exclusive) fail(NABU.NHACP_ERROR_EEXIST, `${url} already exists`);
-      if (!existing && !create) fail(NABU.NHACP_ERROR_ENOENT, `${url} not found`);
+      if (existing?.kind === 'directory') fail('EISDIR', `${url} is a directory`);
+      if (existing && create && exclusive) fail('EEXIST', `${url} already exists`);
+      if (!existing && !create) fail('ENOENT', `${url} not found`);
 
       const handle = existing ?? await dir.getFileHandle(name, { create: true });
       const file = await this.#load([...parts, handle.name], handle);
       return { file, created: !existing };
     }
     catch (e) {
-      throw nhacpError(e, `open ${url}`);
+      throw storageError(e, `open ${url}`);
     }
   }
 
   async openDirectory(url) {
     try {
       const dir = await this.#dir(this.#parts(url), false);
-      if (!dir) fail(NABU.NHACP_ERROR_ENOENT, `${url} not found`);
+      if (!dir) fail('ENOENT', `${url} not found`);
     }
     catch (e) {
-      throw nhacpError(e, `open ${url}`);
+      throw storageError(e, `open ${url}`);
     }
   }
 
@@ -169,7 +168,7 @@ export class FolderStorage {
     const parts = this.#parts(url);
     try {
       const dir = await this.#dir(parts, false);
-      if (!dir) fail(NABU.NHACP_ERROR_ENOENT, `${url} not found`);
+      if (!dir) fail('ENOENT', `${url} not found`);
       const entries = [];
       for await (const [name, handle] of dir.entries()) {
         if (handle.kind === 'directory') {
@@ -189,20 +188,20 @@ export class FolderStorage {
       return entries.sort((a, b) => lower(a.name).localeCompare(lower(b.name)));
     }
     catch (e) {
-      throw nhacpError(e, `list ${url}`);
+      throw storageError(e, `list ${url}`);
     }
   }
 
   async remove(url, { directory = false } = {}) {
     const parts = this.#parts(url);
-    if (!parts.length) fail(NABU.NHACP_ERROR_EACCES, 'can\'t remove the top-level directory');
+    if (!parts.length) fail('EACCES', 'can\'t remove the top-level directory');
     const name = parts.pop();
     try {
       const dir = await this.#dir(parts, false);
       const entry = dir && await findEntry(dir, name);
-      if (!entry) fail(NABU.NHACP_ERROR_ENOENT, `${url} not found`);
-      if (directory && entry.kind !== 'directory') fail(NABU.NHACP_ERROR_ENOTDIR, `${url} is not a directory`);
-      if (!directory && entry.kind === 'directory') fail(NABU.NHACP_ERROR_EISDIR, `${url} is a directory`);
+      if (!entry) fail('ENOENT', `${url} not found`);
+      if (directory && entry.kind !== 'directory') fail('ENOTDIR', `${url} is not a directory`);
+      if (!directory && entry.kind === 'directory') fail('EISDIR', `${url} is a directory`);
 
       const key = lower([...parts, entry.name].join('/'));
       this.#files.get(key)?.discard();
@@ -210,21 +209,21 @@ export class FolderStorage {
       await dir.removeEntry(entry.name);
     }
     catch (e) {
-      throw nhacpError(e, `remove ${url}`);
+      throw storageError(e, `remove ${url}`);
     }
   }
 
   async rename(fromUrl, toUrl) {
     const fromParts = this.#parts(fromUrl);
     const toParts = this.#parts(toUrl);
-    if (!fromParts.length || !toParts.length) fail(NABU.NHACP_ERROR_EINVAL, 'bad name');
+    if (!fromParts.length || !toParts.length) fail('EINVAL', 'bad name');
     const fromName = fromParts.pop();
     const toName = toParts.pop();
     try {
       const fromDir = await this.#dir(fromParts, false);
       const entry = fromDir && await findEntry(fromDir, fromName);
-      if (!entry) fail(NABU.NHACP_ERROR_ENOENT, `${fromUrl} not found`);
-      if (entry.kind === 'directory') fail(NABU.NHACP_ERROR_ENOTSUP, 'renaming directories is not supported');
+      if (!entry) fail('ENOENT', `${fromUrl} not found`);
+      if (entry.kind === 'directory') fail('ENOTSUP', 'renaming directories is not supported');
 
       const toDir = await this.#dir(toParts, true);
       const fromKey = lower([...fromParts, entry.name].join('/'));
@@ -233,7 +232,7 @@ export class FolderStorage {
       // Renaming onto another file replaces it; onto a directory, no.
       if (fromKey !== toKey) {
         const existing = await findEntry(toDir, toName);
-        if (existing?.kind === 'directory') fail(NABU.NHACP_ERROR_EISDIR, `${toUrl} is a directory`);
+        if (existing?.kind === 'directory') fail('EISDIR', `${toUrl} is a directory`);
         if (existing) {
           this.#files.get(toKey)?.discard();
           this.#files.delete(toKey);
@@ -251,21 +250,21 @@ export class FolderStorage {
       }
     }
     catch (e) {
-      throw nhacpError(e, `rename ${fromUrl}`);
+      throw storageError(e, `rename ${fromUrl}`);
     }
   }
 
   async mkdir(url) {
     const parts = this.#parts(url);
-    if (!parts.length) fail(NABU.NHACP_ERROR_EEXIST, `${url} already exists`);
+    if (!parts.length) fail('EEXIST', `${url} already exists`);
     const name = parts.pop();
     try {
       const dir = await this.#dir(parts, true);
-      if (await findEntry(dir, name)) fail(NABU.NHACP_ERROR_EEXIST, `${url} already exists`);
+      if (await findEntry(dir, name)) fail('EEXIST', `${url} already exists`);
       await dir.getDirectoryHandle(name, { create: true });
     }
     catch (e) {
-      throw nhacpError(e, `mkdir ${url}`);
+      throw storageError(e, `mkdir ${url}`);
     }
   }
 
@@ -280,7 +279,7 @@ export class FolderStorage {
 
   // The path of `url` under the root, as a list of names.
   #parts(url) {
-    if (!this.contains(url)) fail(NABU.NHACP_ERROR_ENOENT, `${url} is outside the folder`);
+    if (!this.contains(url)) fail('ENOENT', `${url} is outside the folder`);
     const rest = trimSlash(url).slice(this.#rootUrl.length);
     return rest.split('/').filter(p => p);
   }
@@ -290,7 +289,7 @@ export class FolderStorage {
     let dir = this.#root;
     for (const name of parts) {
       const entry = await findEntry(dir, name);
-      if (entry?.kind === 'file') fail(NABU.NHACP_ERROR_ENOTDIR, `${name} is not a directory`);
+      if (entry?.kind === 'file') fail('ENOTDIR', `${name} is not a directory`);
       if (entry) dir = entry;
       else if (create) dir = await dir.getDirectoryHandle(name, { create: true });
       else return null;

@@ -17,7 +17,7 @@ import { invoke, transition } from 'robot3';
 import { baseName, bytesToString } from './util';
 
 import { resetOnError, getBytes } from './common';
-import { MemoryStorage, NhacpError } from './nhacp-storage';
+import { MemoryStorage, StorageError } from './storage';
 import * as NABU from './constants';
 
 const ADAPTER_ID = 'nabu.run';
@@ -47,7 +47,19 @@ const errorNames = {
   [NABU.NHACP_ERROR_EROFS]: 'write-protected',
 };
 
+// Errors that are reported to the NABU as an NHACP ERROR response.
+export class NhacpError extends Error {
+  constructor(code, message) {
+    super(message ?? `NHACP error code ${code}`);
+    this.name = 'NhacpError';
+    this.code = code;
+  }
+}
+
 const fail = (code, message) => { throw new NhacpError(code, message); };
+
+// A storage failure as the NHACP error with the same name.
+const fromStorage = e => new NhacpError(NABU[`NHACP_ERROR_${e.code}`] ?? NABU.NHACP_ERROR_EIO, e.message);
 
 // Reads the fields of a request. Running out of bytes is EINVAL; extra
 // bytes at the end are allowed.
@@ -484,7 +496,8 @@ const handleMessage = async (ctx, sessionId, type, req) => {
       fail(NABU.NHACP_ERROR_ENOTSUP, `unsupported request type ${type}`);
     return await handler(ctx, session, req, sessionId);
   }
-  catch (e) {
+  catch (caught) {
+    const e = caught instanceof StorageError ? fromStorage(caught) : caught;
     if (!(e instanceof NhacpError)) throw e;
     ctx.log(`NHACP error ${e.code}: ${e.message}`);
     if (noResponse.has(type)) return null;

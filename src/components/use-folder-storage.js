@@ -26,7 +26,6 @@
 import { createContext } from 'preact';
 import { useCallback, useEffect, useState } from 'preact/hooks';
 
-import * as NABU from '../machines/adaptor/constants';
 import { loadFolderSettings, updateFolderSettings } from './folder-settings';
 
 export const StorageContext = createContext(null);
@@ -88,7 +87,7 @@ export function useFolderStorage(manager, channel) {
       setError(event.error);
       // The browser took back its permission; stop using the folder until
       // the user reconnects.
-      if (event.error?.code === NABU.NHACP_ERROR_EACCES) {
+      if (event.error?.code === 'EACCES') {
         manager.setRoot(null);
         setStatus('saved');
         setAttention(true);
