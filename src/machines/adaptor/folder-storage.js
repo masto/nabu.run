@@ -13,7 +13,10 @@
 // Storage in a folder on the user's computer, through the File System
 // Access API. Implements the interface described in storage.js.
 
-import { MemoryFile, StorageError } from './storage';
+import {
+  MemoryFile, StorageError,
+  EACCES, EBUSY, EEXIST, EINVAL, EIO, EISDIR, ENOENT, ENOSPC, ENOTDIR, ENOTEMPTY, ENOTSUP,
+} from './storage';
 
 const fail = (code, message) => { throw new StorageError(code, message); };
 
@@ -21,14 +24,14 @@ const fail = (code, message) => { throw new StorageError(code, message); };
 const storageError = (e, what) => {
   if (e instanceof StorageError) return e;
   const code = {
-    NotFoundError: 'ENOENT',
-    TypeMismatchError: 'ENOTDIR',
-    NotAllowedError: 'EACCES',
-    SecurityError: 'EACCES',
-    InvalidModificationError: 'ENOTEMPTY',
-    NoModificationAllowedError: 'EBUSY',
-    QuotaExceededError: 'ENOSPC',
-  }[e?.name] ?? 'EIO';
+    NotFoundError: ENOENT,
+    TypeMismatchError: ENOTDIR,
+    NotAllowedError: EACCES,
+    SecurityError: EACCES,
+    InvalidModificationError: ENOTEMPTY,
+    NoModificationAllowedError: EBUSY,
+    QuotaExceededError: ENOSPC,
+  }[e?.name] ?? EIO;
   const error = new StorageError(code, `${what}: ${e?.name ?? 'Error'}: ${e?.message ?? e}`);
   error.cause = e;
   return error;
@@ -134,16 +137,16 @@ export class FolderStorage {
 
   async openFile(url, { create = false, exclusive = false } = {}) {
     const parts = this.#parts(url);
-    if (!parts.length) fail('EISDIR', `${url} is a directory`);
+    if (!parts.length) fail(EISDIR, `${url} is a directory`);
     const name = parts.pop();
     try {
       const dir = await this.#dir(parts, create);
-      if (!dir) fail('ENOENT', `${url} not found`);
+      if (!dir) fail(ENOENT, `${url} not found`);
 
       const existing = await findEntry(dir, name);
-      if (existing?.kind === 'directory') fail('EISDIR', `${url} is a directory`);
-      if (existing && create && exclusive) fail('EEXIST', `${url} already exists`);
-      if (!existing && !create) fail('ENOENT', `${url} not found`);
+      if (existing?.kind === 'directory') fail(EISDIR, `${url} is a directory`);
+      if (existing && create && exclusive) fail(EEXIST, `${url} already exists`);
+      if (!existing && !create) fail(ENOENT, `${url} not found`);
 
       const handle = existing ?? await dir.getFileHandle(name, { create: true });
       const file = await this.#load([...parts, handle.name], handle);
@@ -157,7 +160,7 @@ export class FolderStorage {
   async openDirectory(url) {
     try {
       const dir = await this.#dir(this.#parts(url), false);
-      if (!dir) fail('ENOENT', `${url} not found`);
+      if (!dir) fail(ENOENT, `${url} not found`);
     }
     catch (e) {
       throw storageError(e, `open ${url}`);
@@ -168,7 +171,7 @@ export class FolderStorage {
     const parts = this.#parts(url);
     try {
       const dir = await this.#dir(parts, false);
-      if (!dir) fail('ENOENT', `${url} not found`);
+      if (!dir) fail(ENOENT, `${url} not found`);
       const entries = [];
       for await (const [name, handle] of dir.entries()) {
         if (handle.kind === 'directory') {
@@ -194,14 +197,14 @@ export class FolderStorage {
 
   async remove(url, { directory = false } = {}) {
     const parts = this.#parts(url);
-    if (!parts.length) fail('EACCES', 'can\'t remove the top-level directory');
+    if (!parts.length) fail(EACCES, 'can\'t remove the top-level directory');
     const name = parts.pop();
     try {
       const dir = await this.#dir(parts, false);
       const entry = dir && await findEntry(dir, name);
-      if (!entry) fail('ENOENT', `${url} not found`);
-      if (directory && entry.kind !== 'directory') fail('ENOTDIR', `${url} is not a directory`);
-      if (!directory && entry.kind === 'directory') fail('EISDIR', `${url} is a directory`);
+      if (!entry) fail(ENOENT, `${url} not found`);
+      if (directory && entry.kind !== 'directory') fail(ENOTDIR, `${url} is not a directory`);
+      if (!directory && entry.kind === 'directory') fail(EISDIR, `${url} is a directory`);
 
       const key = lower([...parts, entry.name].join('/'));
       this.#files.get(key)?.discard();
@@ -216,14 +219,14 @@ export class FolderStorage {
   async rename(fromUrl, toUrl) {
     const fromParts = this.#parts(fromUrl);
     const toParts = this.#parts(toUrl);
-    if (!fromParts.length || !toParts.length) fail('EINVAL', 'bad name');
+    if (!fromParts.length || !toParts.length) fail(EINVAL, 'bad name');
     const fromName = fromParts.pop();
     const toName = toParts.pop();
     try {
       const fromDir = await this.#dir(fromParts, false);
       const entry = fromDir && await findEntry(fromDir, fromName);
-      if (!entry) fail('ENOENT', `${fromUrl} not found`);
-      if (entry.kind === 'directory') fail('ENOTSUP', 'renaming directories is not supported');
+      if (!entry) fail(ENOENT, `${fromUrl} not found`);
+      if (entry.kind === 'directory') fail(ENOTSUP, 'renaming directories is not supported');
 
       const toDir = await this.#dir(toParts, true);
       const fromKey = lower([...fromParts, entry.name].join('/'));
@@ -232,7 +235,7 @@ export class FolderStorage {
       // Renaming onto another file replaces it; onto a directory, no.
       if (fromKey !== toKey) {
         const existing = await findEntry(toDir, toName);
-        if (existing?.kind === 'directory') fail('EISDIR', `${toUrl} is a directory`);
+        if (existing?.kind === 'directory') fail(EISDIR, `${toUrl} is a directory`);
         if (existing) {
           this.#files.get(toKey)?.discard();
           this.#files.delete(toKey);
@@ -256,11 +259,11 @@ export class FolderStorage {
 
   async mkdir(url) {
     const parts = this.#parts(url);
-    if (!parts.length) fail('EEXIST', `${url} already exists`);
+    if (!parts.length) fail(EEXIST, `${url} already exists`);
     const name = parts.pop();
     try {
       const dir = await this.#dir(parts, true);
-      if (await findEntry(dir, name)) fail('EEXIST', `${url} already exists`);
+      if (await findEntry(dir, name)) fail(EEXIST, `${url} already exists`);
       await dir.getDirectoryHandle(name, { create: true });
     }
     catch (e) {
@@ -279,7 +282,7 @@ export class FolderStorage {
 
   // The path of `url` under the root, as a list of names.
   #parts(url) {
-    if (!this.contains(url)) fail('ENOENT', `${url} is outside the folder`);
+    if (!this.contains(url)) fail(ENOENT, `${url} is outside the folder`);
     const rest = trimSlash(url).slice(this.#rootUrl.length);
     return rest.split('/').filter(p => p);
   }
@@ -289,7 +292,7 @@ export class FolderStorage {
     let dir = this.#root;
     for (const name of parts) {
       const entry = await findEntry(dir, name);
-      if (entry?.kind === 'file') fail('ENOTDIR', `${name} is not a directory`);
+      if (entry?.kind === 'file') fail(ENOTDIR, `${name} is not a directory`);
       if (entry) dir = entry;
       else if (create) dir = await dir.getDirectoryHandle(name, { create: true });
       else return null;

@@ -20,7 +20,7 @@
 // with other channels. The first time, the channel's files are copied into
 // it; after that it's left alone.
 
-import { MemoryStorage, StorageError } from './storage';
+import { MemoryStorage, StorageError, EACCES, EIO, ENOTSUP } from './storage';
 import { FolderStorage, copyChannel } from './folder-storage';
 
 const findEntry = async (dir, name) => {
@@ -143,7 +143,7 @@ export class StorageManager {
     }
     catch (e) {
       throw e instanceof StorageError ? e :
-        new StorageError('EIO', `preparing the folder: ${e.message}`);
+        new StorageError(EIO, `preparing the folder: ${e.message}`);
     }
     return folder.contains(url) ? folder : this.#memory;
   }
@@ -154,7 +154,7 @@ export class StorageManager {
       return await operation(storage);
     }
     catch (e) {
-      if (e.code === 'EACCES' && storage !== this.#memory) {
+      if (e.code === EACCES && storage !== this.#memory) {
         this.#emit({ type: 'error', error: e });
       }
       throw e;
@@ -181,7 +181,7 @@ export class StorageManager {
     const to = await this.#pick(toUrl);
     return this.#run(fromUrl, from => {
       if (from !== to) {
-        throw new StorageError('ENOTSUP', 'can\'t rename between storages');
+        throw new StorageError(ENOTSUP, 'can\'t rename between storages');
       }
       return from.rename(fromUrl, toUrl);
     });

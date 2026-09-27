@@ -24,7 +24,7 @@
 import { baseName } from './util';
 
 import { getBytes } from './common';
-import { MemoryFile, StorageError, storageOf } from './storage';
+import { MemoryFile, StorageError, storageOf, EIO, ENOENT } from './storage';
 import * as NABU from './constants';
 
 /*
@@ -107,10 +107,10 @@ const webFile = (ctx, name) => {
         response = await fetch(proxied(ctx, name));
       }
       catch (e) {
-        throw new StorageError('EIO', `fetch ${name}: ${e.message}`);
+        throw new StorageError(EIO, `fetch ${name}: ${e.message}`);
       }
       if (!response.ok) {
-        throw new StorageError(response.status === 404 ? 'ENOENT' : 'EIO', `fetch ${name}: ${response.status}`);
+        throw new StorageError(response.status === 404 ? ENOENT : EIO, `fetch ${name}: ${response.status}`);
       }
       return new MemoryFile(new Uint8Array(await response.arrayBuffer()));
     })();
