@@ -36,7 +36,10 @@ globalThis.alert = message => log('ALERT', message);
 
 // Files are served from the directory, as local:<absolute path> URLs.
 globalThis.fetch = async url => {
-  const file = decodeURIComponent(String(url).replace(/^local:/, ''));
+  let file = decodeURIComponent(String(url).replace(/^local:/, ''));
+  // Web URLs (from RetroNET) are served from <directory>/<host>/<path>.
+  const web = file.match(/^https?:\/\/([^/]+)\/+(.*)$/);
+  if (web) file = path.join(channel.imageDir, web[1], web[2]);
   try {
     const bytes = fs.readFileSync(file);
     log('FETCH', file, bytes.length);
