@@ -166,7 +166,7 @@ export function useFolderStorage(manager, channel) {
     status,
     folderName: folder?.name,
     attention,
-    copying: channel?.id ? progress[channel.id] ?? null : null,
+    copying: channel?.storageId ? progress[channel.storageId] ?? null : null,
     error,
     chooseFolder,
     chooseTemporary,

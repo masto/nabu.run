@@ -221,8 +221,8 @@ describe('copying a channel', () => {
 });
 
 describe('StorageManager', () => {
-  const nfs = { id: 'ishkur-nfs', storage: 'folder', baseUrl: 'https://example.test/', imageDir: 'nfs', imageName: '000001.nabu' };
-  const plain = { id: 'cycle-2', baseUrl: 'https://example.test/', imageDir: 'cycle-2', imageName: null };
+  const nfs = { storageId: 'ishkur-nfs', storage: 'folder', baseUrl: 'https://example.test/', imageDir: 'nfs', imageName: '000001.nabu' };
+  const plain = { storageId: 'cycle-2', baseUrl: 'https://example.test/', imageDir: 'cycle-2', imageName: null };
 
   let channel;
   let copies;
@@ -285,6 +285,20 @@ describe('StorageManager', () => {
     expect(copies.get('ishkur-nfs')).toBe('done');
   });
 
+  it('shares a subfolder between channels with the same storageId', async () => {
+    manager.setRoot(root);
+    const { file } = await manager.openFile(`${ROOT}/A0/NEW.TXT`, { create: true, exclusive: true });
+    file.write(0, bytes('shared'));
+    await manager.flush();
+    const fetches = fetch.mock.calls.length;
+
+    channel = { ...nfs, imageName: 'OTHER.NABU' };
+    const { file: again } = await manager.openFile(`${ROOT}/A0/NEW.TXT`);
+    expect(new TextDecoder().decode(again.read(0, 100))).toBe('shared');
+    expect(fetch.mock.calls.length).toBe(fetches);
+    expect([...root.children.keys()]).toEqual(['ishkur-nfs']);
+  });
+
   it('leaves a subfolder that was already there alone', async () => {
     root.add({ 'ishkur-nfs/A0/MINE.COM': 'mine' });
     manager.setRoot(root);
@@ -342,7 +356,7 @@ describe('NHACP with a folder', () => {
   it('saves what the NABU writes into the folder', async () => {
     const root = new FakeDirectory('nabu');
     const copies = new Map();
-    const channel = { id: 'ishkur-nfs', storage: 'folder', baseUrl: 'https://example.test/', imageDir: 'nfs', imageName: '000001.nabu' };
+    const channel = { storageId: 'ishkur-nfs', storage: 'folder', baseUrl: 'https://example.test/', imageDir: 'nfs', imageName: '000001.nabu' };
     const manager = new StorageManager({
       getChannel: () => channel,
       copies: { get: async id => copies.get(id), set: async (id, s) => { copies.set(id, s); } },

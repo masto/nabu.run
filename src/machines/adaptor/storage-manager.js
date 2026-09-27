@@ -15,8 +15,10 @@
 // otherwise in memory. Implements the storage interface described in
 // storage.js.
 //
-// Each channel gets its own subfolder, named after the channel. The first
-// time, the channel's files are copied into it; after that it's left alone.
+// Each channel gets its own subfolder, named after its storageId, which is
+// the channel's own name unless the channel list says it shares its files
+// with other channels. The first time, the channel's files are copied into
+// it; after that it's left alone.
 
 import { MemoryStorage, StorageError } from './storage';
 import { FolderStorage, copyChannel } from './folder-storage';
@@ -37,7 +39,7 @@ export class StorageManager {
   #ready = new Set(); // FolderStorages that have finished preparing
   #listeners = new Set();
 
-  // getChannel: the current channel ({ id, storage, baseUrl, imageDir })
+  // getChannel: the current channel ({ storageId, storage, baseUrl, imageDir })
   // copies: remembers each channel's copy, { get(id), set(id, 'copying' | 'done') }
   constructor({ getChannel, copies, memory = new MemoryStorage() }) {
     this.#getChannel = getChannel;
@@ -73,39 +75,39 @@ export class StorageManager {
 
   // Whether this channel's files go in the folder at the moment.
   usesFolder(channel = this.#getChannel()) {
-    return Boolean(this.#root && channel?.storage === 'folder' && channel.id);
+    return Boolean(this.#root && channel?.storage === 'folder' && channel.storageId);
   }
 
   // The FolderStorage for a channel, copying its files in first if needed.
   folderFor(channel) {
     const root = this.#root;
-    if (!this.#folders.has(channel.id)) {
+    if (!this.#folders.has(channel.storageId)) {
       const pending = this.#prepare(root, channel);
-      this.#folders.set(channel.id, pending);
+      this.#folders.set(channel.storageId, pending);
       pending.then(folder => {
-        if (this.#folders.get(channel.id) === pending) this.#ready.add(folder);
+        if (this.#folders.get(channel.storageId) === pending) this.#ready.add(folder);
       }, e => {
-        if (this.#folders.get(channel.id) === pending) this.#folders.delete(channel.id);
-        this.#emit({ type: 'progress', channel: channel.id, progress: null });
+        if (this.#folders.get(channel.storageId) === pending) this.#folders.delete(channel.storageId);
+        this.#emit({ type: 'progress', channel: channel.storageId, progress: null });
         this.#emit({ type: 'error', error: e });
       });
     }
-    return this.#folders.get(channel.id);
+    return this.#folders.get(channel.storageId);
   }
 
   async #prepare(root, channel) {
     const sourceUrl = `${channel.baseUrl}${channel.imageDir}`;
-    const copied = await this.#copies.get(channel.id);
-    let dir = await findEntry(root, channel.id);
+    const copied = await this.#copies.get(channel.storageId);
+    let dir = await findEntry(root, channel.storageId);
     if (dir && dir.kind !== 'directory') {
-      throw new Error(`"${channel.id}" in the folder isn't a folder`);
+      throw new Error(`"${channel.storageId}" in the folder isn't a folder`);
     }
 
     // A new subfolder, or one we didn't finish copying into. One that was
     // already there otherwise is the user's, and isn't touched.
     if (!dir || copied === 'copying') {
-      dir ??= await root.getDirectoryHandle(channel.id, { create: true });
-      await this.#copies.set(channel.id, 'copying');
+      dir ??= await root.getDirectoryHandle(channel.storageId, { create: true });
+      await this.#copies.set(channel.storageId, 'copying');
       // Progress comes after every file; pass it on a few times a second,
       // which is plenty for a progress display and cheap to render.
       let last = 0;
@@ -113,14 +115,14 @@ export class StorageManager {
         const now = Date.now();
         if (now - last < 100 && progress.done < progress.total) return;
         last = now;
-        this.#emit({ type: 'progress', channel: channel.id, progress });
+        this.#emit({ type: 'progress', channel: channel.storageId, progress });
       }, {
         // The boot image is always served from the channel itself, so a
         // copy in the folder would only mislead.
         skip: channel.imageName ? [channel.imageName] : [],
       });
-      await this.#copies.set(channel.id, 'done');
-      this.#emit({ type: 'progress', channel: channel.id, progress: null });
+      await this.#copies.set(channel.storageId, 'done');
+      this.#emit({ type: 'progress', channel: channel.storageId, progress: null });
     }
 
     const folder = new FolderStorage(dir, sourceUrl);

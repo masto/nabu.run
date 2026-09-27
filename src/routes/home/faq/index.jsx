@@ -57,7 +57,7 @@ const Faq = () => {
 
       <h2 id="files">Where are my files kept?</h2>
       <p>
-        Some channels, like "Ishkur CP/M (NFS)", support local storage. Their channel
+        Some channels, like "Ishkur CP/M (NFS)" and Cloud CP/M, support local storage. Their channel
         has a <b>Storage</b> switch at the top of the page with two settings.
       </p>
       <p>
@@ -68,8 +68,10 @@ const Faq = () => {
       <p>
         <b>Local folder</b> keeps the files in a folder on your computer that
         you choose. The first time, nabu.run copies the channel's files into a
-        subfolder named after the channel, and from then on that subfolder is
-        the NABU's disk: you can add, edit and back up files there yourself.
+        subfolder named after the channel (channels that use the same files,
+        like the Cloud CP/M ones, share a subfolder), and from then on that
+        subfolder is the NABU's disk: you can add, edit and back up files
+        there yourself.
       </p>
       <p>
         Local folders require a browser that supports{" "}
