@@ -27,6 +27,7 @@ import {
   expectToReceive
 } from './common';
 import { retroNetHandlers } from './retronet';
+import { cloudCpmHandlers } from './retronet-cpm';
 import { nhacpStates } from './nhacp';
 import * as NABU from './constants';
 
@@ -69,7 +70,7 @@ const dispatch = (expectMsg, nextState) => transition('done', nextState,
 // RetroNET messages each have a handler, which reads the rest of the
 // message and replies. Each becomes a state named after its message.
 const retroNet = (() => {
-  const handlers = retroNetHandlers;
+  const handlers = { ...retroNetHandlers, ...cloudCpmHandlers };
   const states = {}, codes = {};
   for (const [code, fn] of Object.entries(handlers)) {
     const name = Object.keys(NABU).find(k => k.startsWith('MSG_RN_') && NABU[k] === Number(code)) ??

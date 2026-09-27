@@ -130,10 +130,8 @@ delete is not an error.
 (`03 00` for a 384-byte file).
 
 **Read (9)** replies `00` and 128 bytes, or `01` at end of file. A final
-partial record is sent as a full 128 bytes (the IA logs "= 104 bytes" for the
-last record of a 1640-byte file; the padding value hasn't been checked, but
-CP/M text conventionally ends at `1A`). Sequential and random reads both
-arrive as this command.
+partial record is padded to 128 bytes with `1A`, CP/M's end-of-file
+character. Sequential and random reads both arrive as this command.
 
 **Write (10)** has no reply. Writing past the end grows the file, filling any
 gap with zeros: records 5 and 7 written to a 3-record file leave an 8-record
@@ -206,7 +204,6 @@ use the TCP client commands `0xD0` to `0xD4`.
 
 - Sub 13: what it is and when the BDOS sends it.
 - Sub 5 on an existing file, and its failure reply.
-- The padding in a final partial record.
 - `0xBA 0x1F`.
 - Whether CP/M handles and file-store handles share one numbering (they
   never overlapped in the captures: CP/M handles started at 1 while
