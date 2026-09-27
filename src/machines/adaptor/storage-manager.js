@@ -117,9 +117,12 @@ export class StorageManager {
         last = now;
         this.#emit({ type: 'progress', channel: channel.storageId, progress });
       }, {
-        // The boot image is always served from the channel itself, so a
-        // copy in the folder would only mislead.
-        skip: channel.imageName ? [channel.imageName] : [],
+        // Boot images are always served from the channel itself, so copies
+        // in the folder would only mislead. That's the channel's image, and
+        // any .nabu or .pak at the top (such as the loaders of other
+        // channels sharing the folder).
+        skip: name => name.toLowerCase() === channel.imageName?.toLowerCase() ||
+          /\.(nabu|pak)$/i.test(name),
       });
       await this.#copies.set(channel.storageId, 'done');
       this.#emit({ type: 'progress', channel: channel.storageId, progress: null });

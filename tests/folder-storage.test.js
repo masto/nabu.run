@@ -202,10 +202,10 @@ describe('copying a channel', () => {
     expect(progress.at(-1)).toEqual({ done: 23, total: 23 });
   });
 
-  it('skips the files it\'s told to', async () => {
+  it('skips the top-level files it\'s told to', async () => {
     serve(channelFiles);
     const dir = new FakeDirectory();
-    await copyChannel(ROOT, dir, () => { }, { skip: ['000001.NABU'] });
+    await copyChannel(ROOT, dir, () => { }, { skip: name => name === '000001.nabu' || name === 'CPM22.SYS' });
     expect(dir.at('000001.nabu')).toBeUndefined();
     expect(dir.at('A0/CPM22.SYS').text()).toBe('system');
   });
@@ -255,6 +255,15 @@ describe('StorageManager', () => {
     const withoutBoot = Object.fromEntries(Object.entries(channelFiles).filter(([path]) => path !== '000001.nabu'));
     expect(root.at('ishkur-nfs').tree()).toEqual(withoutBoot);
     expect(copies.get('ishkur-nfs')).toBe('done');
+  });
+
+  it('doesn\'t copy any boot images', async () => {
+    serve({ ...channelFiles, 'CPM22-GUI.NABU': 'loader', 'BIOS.BIN': 'bios' });
+    manager.setRoot(root);
+    await manager.openDirectory(`${ROOT}/A0`);
+    expect(root.at('ishkur-nfs/CPM22-GUI.NABU')).toBeUndefined();
+    expect(root.at('ishkur-nfs/000001.nabu')).toBeUndefined();
+    expect(root.at('ishkur-nfs/BIOS.BIN').text()).toBe('bios');
   });
 
   it('keeps changes in the folder', async () => {

@@ -316,10 +316,9 @@ export class FolderStorage {
 // Copy a channel's files into `dir`, following the index.json in each of
 // its directories (see make-index.py in the catalog). Files that are
 // already there are left alone, so an interrupted copy can be resumed.
-// `onProgress` gets { done, total } in bytes. `skip` lists top-level files
-// not to copy.
-export async function copyChannel(sourceUrl, dir, onProgress = () => { }, { skip = [] } = {}) {
-  const skipped = new Set(skip.map(name => `/${name}`.toLowerCase()));
+// `onProgress` gets { done, total } in bytes. `skip(name)` says whether to
+// leave out a file at the top of the channel.
+export async function copyChannel(sourceUrl, dir, onProgress = () => { }, { skip = () => false } = {}) {
   const base = trimSlash(sourceUrl);
 
   // Find everything first, to report progress.
@@ -330,7 +329,7 @@ export async function copyChannel(sourceUrl, dir, onProgress = () => { }, { skip
     const { entries } = JSON.parse(new TextDecoder().decode(await response.arrayBuffer()));
     for (const e of entries) {
       if (e.dir) await walk(`${path}/${e.name}`);
-      else if (!skipped.has(`${path}/${e.name}`.toLowerCase())) files.push({ path: `${path}/${e.name}`, size: e.size ?? 0 });
+      else if (path || !skip(e.name)) files.push({ path: `${path}/${e.name}`, size: e.size ?? 0 });
     }
   };
   await walk('');
