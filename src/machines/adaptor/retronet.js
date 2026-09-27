@@ -10,333 +10,516 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Handlers for the RetroNET protocol
+// Handlers for RetroNET, DJ Sures' extensions to the NABU protocol: the
+// file store, character devices, and enough of the rest to fail politely.
+// The Cloud CP/M drive commands are in retronet-cpm.js. See
+// docs/cloud-cpm-protocol.md for the spec and how the Internet Adapter (IA)
+// actually behaves.
+//
+// Names given to the file store are either web URLs, fetched through the
+// RetroNET proxy and kept in memory, or local names, which are files in the
+// IA's "store" folder. Here the store is the channel's directory, in the
+// same storage NHACP uses, so it can be a local folder.
 
-import { transition, invoke } from 'robot3';
-import { baseName, bytesToString } from './util';
+import { baseName } from './util';
 
-import { resetOnError, getBytes } from './common';
+import { getBytes } from './common';
+import { MemoryFile, StorageError, storageOf } from './storage';
 import * as NABU from './constants';
 
-const rnUrlFor = (ctx, fileName) => {
-  // Until local files are supported, we want to hard fail anything that's not
-  // a cloud URL. 'about:' seems to do the trick.
-  if (!fileName.match(/^http/)) return 'about:';
+/*
+ *  Reading requests and writing replies
+ */
 
-  // Now we have to do some double backflip escaping so these filenames
-  // make it through to the cloud server.
-  const url = new URL(fileName);
-  url.pathname = encodeURIComponent(url.pathname);
+export const u8 = async ctx => (await getBytes(ctx, 1))[0];
+export const u16 = async ctx => {
+  const [lo, hi] = await getBytes(ctx, 2);
+  return lo | hi << 8;
+};
+export const u32 = async ctx =>
+  new DataView(new Uint8Array(await getBytes(ctx, 4)).buffer).getUint32(0, true);
+const i32 = async ctx => (await u32(ctx)) | 0;
+export const bytes = async (ctx, n) => new Uint8Array(await getBytes(ctx, n));
+const string = async ctx => new TextDecoder().decode(await bytes(ctx, await u8(ctx)));
 
-  return ctx.rnProxyUrl + url;
-}
+export const le16 = n => [n & 0xff, n >> 8 & 0xff];
+export const le32 = n => [n & 0xff, n >> 8 & 0xff, n >> 16 & 0xff, n >>> 24 & 0xff];
 
-// Ensure we have downloaded the file.
-const fetchFile = async (ctx, fileName) => {
-  ctx.rn.files ??= {};
-
-  // Maybe we already have it?
-  if (ctx.rn.files[fileName]) return;
-
-  // Nope, so we need to go get it.
-  const response = await fetch(rnUrlFor(ctx, fileName));
-  if (!response.ok) {
-    throw new Error(`failed to fetch ${fileName}: ${response.status}`);
-  }
-
-  const fileData = await response.arrayBuffer();
-  const size = fileData.byteLength;
-  ctx.rn.files[fileName] = { fileData, size };
+// Send a reply made of byte arrays and numbers (bytes).
+export const reply = (ctx, ...parts) => {
+  const flat = parts.flatMap(p => p instanceof Uint8Array ? [...p] : p);
+  return ctx.writer.write(new Uint8Array(flat));
 };
 
-// These are merged into the state machine in protocol.js.
-export const retroNetStates = {
-  handleFileSizeMsg: invoke(
-    async ctx => {
-      const len = (await getBytes(ctx, 1))[0];
-      const fileName = bytesToString(await getBytes(ctx, len));
+export const status = (ctx, fileName, message, extra) => {
+  ctx.log(message);
+  ctx.progress = { fileName, message, ...extra };
+};
 
-      let size = -1;
+// Storage failures that the NABU should hear about as "no" rather than
+// anything worse. Anything else is a bug or a broken connection.
+export const orElse = async (promise, fallback) => {
+  try {
+    return await promise;
+  }
+  catch (e) {
+    if (!(e instanceof StorageError)) throw e;
+    return fallback;
+  }
+};
+
+/*
+ *  Names and files
+ */
+
+const isWeb = name => /^(https?|ftp):\/\//i.test(name);
+
+// The channel's directory, which stands in for the IA's store folder.
+export const storeUrl = ctx => {
+  const channel = ctx.getChannel();
+  return `${channel.baseUrl}${channel.imageDir}`;
+};
+
+// A local name as a URL in the store. Drive letters and backslashes are
+// allowed (z:\test\file.txt), and so are subdirectories.
+export const localUrl = (ctx, name) => {
+  const parts = name.replace(/^[a-z]:/i, '').split(/[\\/]+/)
+    .filter(p => p && p !== '.' && p !== '..');
+  return [storeUrl(ctx), ...parts].join('/');
+};
+
+// Web files come through the proxy, which needs the path escaped once more
+// to arrive intact.
+const proxied = (ctx, name) => {
+  const url = new URL(name);
+  url.pathname = encodeURIComponent(url.pathname);
+  return (ctx.rnProxyUrl ?? '') + url;
+};
+
+// Web files are fetched once per connection and then kept in memory. The
+// NABU can change its copy, but nothing is written back.
+const webFile = (ctx, name) => {
+  ctx.rnWeb ??= new Map();
+  if (!ctx.rnWeb.has(name)) {
+    const pending = (async () => {
+      let response;
       try {
-        await fetchFile(ctx, fileName);
-        size = ctx.rn.files[fileName].size;
-      } catch {
-        // A missing file reports size -1.
+        response = await fetch(proxied(ctx, name));
       }
-
-      const message = `FileSize ${baseName(fileName)}: ${size}`;
-      ctx.log(message);
-      ctx.progress = { fileName, message };
-
-      const reply = new Uint8Array(4);
-      new DataView(reply.buffer).setUint32(0, size, true);
-      return ctx.writer.write(reply.buffer);
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
-
-  handleFileOpenMsg: invoke(
-    async ctx => {
-      const len = (await getBytes(ctx, 1))[0];
-      const fileName = bytesToString(await getBytes(ctx, len));
-      const fileFlag = new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
-      let fileHandle = (await getBytes(ctx, 1))[0];
-
-      const rdwr = fileFlag & 1 ? 'rw' : 'ro';
-      ctx.log(`request [${fileHandle}] ${fileName}`);
-
-      ctx.rn.handles ??= [];
-      // Asked to assign a handle, or requested handle is in use.
-      if (fileHandle === 0xff || ctx.rn.handles[fileHandle]) {
-        // Find the next unused handle.
-        fileHandle = ctx.rn.handles.findIndex(e => e == undefined);
-        if (fileHandle === -1) fileHandle = ctx.rn.handles.length;
+      catch (e) {
+        throw new StorageError('EIO', `fetch ${name}: ${e.message}`);
       }
-      // Out of handles? Bad news.
-      if (fileHandle >= 0xff) return ctx.writer.write(new Uint8Array([0xff]).buffer);
-
-      // All good if we made it this far.
-      ctx.rn.handles[fileHandle] = { fileName, fileFlag };
-
-      const message = `Open {${fileHandle}} = ${baseName(fileName)} (${rdwr})`;
-      ctx.log(message);
-      ctx.progress = { fileName, message };
-
-      return ctx.writer.write(new Uint8Array([fileHandle]).buffer);
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
-
-  handleFhDetailsMsg: invoke(
-    async ctx => {
-      const fileHandle = (await getBytes(ctx, 1))[0];
-
-      const fh = ctx.rn.handles[fileHandle];
-      const fileName = fh.fileName;
-
-      await fetchFile(ctx, fileName);
-      const file = ctx.rn.files[fileName];
-
-      const reply = new Uint8Array(83);
-      const dv = new DataView(reply.buffer);
-
-      dv.setUint32(0, file.size, true); // file_size
-
-      dv.setUint16(4, 2023, true); // year
-      dv.setUint8(6, 2); // month
-      dv.setUint8(7, 3); // day
-      dv.setUint8(8, 5); // hour
-      dv.setUint8(9, 10); // minute
-      dv.setUint8(10, 10); // second
-
-      dv.setUint16(11, 2023, true); // year
-      dv.setUint8(13, 2); // month
-      dv.setUint8(14, 3); // day
-      dv.setUint8(15, 5); // hour
-      dv.setUint8(16, 10); // minute
-      dv.setUint8(17, 10); // second
-
-      dv.setUint8(18, fileName.length);
-      new TextEncoder().encodeInto(fileName, reply.subarray(19, 83));
-
-      const message = `Stat ${baseName(fileName)}`;
-      ctx.log(message);
-      ctx.progress = { fileName, message };
-
-      return ctx.writer.write(reply.buffer);
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
-
-  handleFhReadseqMsg: invoke(
-    async ctx => {
-      const fileHandle = (await getBytes(ctx, 1))[0];
-      const reqLength = new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
-
-      const fh = ctx.rn.handles[fileHandle];
-      const fileName = fh.fileName;
-
-      await fetchFile(ctx, fileName);
-      const { fileData, size } = ctx.rn.files[fileName];
-
-      const pos = fh?.pos ?? 0;
-      let end = pos + reqLength;
-      if (end > size) end = size;
-
-      const message = `Reading ${baseName(fileName)}`;
-      ctx.log(`readseq ${baseName(fileName)} ${pos}-${end - 1}/${size}`);
-      ctx.progress = { fileName, message, total: size, complete: end };
-
-      // This is a sequential read, so update the next start position.
-      fh.pos = end;
-
-      const returnLength = new Uint8Array(2);
-      new DataView(returnLength.buffer).setUint16(0, end - pos, true);
-      await ctx.writer.write(returnLength.buffer);
-      if (end === pos) return; // No data
-      return ctx.writer.write(fileData.slice(pos, end));
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
-
-  handleFhReadMsg: invoke(
-    async ctx => {
-      const fileHandle = (await getBytes(ctx, 1))[0];
-      const reqOffset = new DataView(new Uint8Array(await getBytes(ctx, 4)).buffer).getUint32(0, true);
-      const reqLength = new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
-
-      const fh = ctx.rn.handles[fileHandle];
-      const fileName = fh.fileName;
-
-      try {
-        await fetchFile(ctx, fileName);
+      if (!response.ok) {
+        throw new StorageError(response.status === 404 ? 'ENOENT' : 'EIO', `fetch ${name}: ${response.status}`);
       }
-      catch {
-        // Trying to read a nonexistent file is not an error in RetroNET.
-        ctx.rn.files[fileName] = { fileData: new ArrayBuffer(), size: 0 };
-      }
-      const { fileData, size } = ctx.rn.files[fileName];
+      return new MemoryFile(new Uint8Array(await response.arrayBuffer()));
+    })();
+    ctx.rnWeb.set(name, pending);
+    pending.catch(() => ctx.rnWeb.delete(name));
+  }
+  return ctx.rnWeb.get(name);
+};
 
-      const pos = reqOffset;
-      let end = pos + reqLength;
-      if (end > size) end = size;
+// The file called `name`. Local files are created if `create` is set.
+const openNamed = async (ctx, name, { create = false } = {}) => {
+  if (isWeb(name)) return webFile(ctx, name);
+  const { file } = await storageOf(ctx).openFile(localUrl(ctx, name), { create });
+  return file;
+};
 
-      const message = `Read ${baseName(fh.fileName)} @ ${pos}`;
-      ctx.log(`read ${baseName(fileName)} ${pos}-${end - 1}/${size}`);
-      ctx.progress = { fileName, message };
+const readAll = async file => new Uint8Array(await file.read(0, file.size));
 
-      fh.pos = end;
+// Put `data` at `offset`, growing the file if needed.
+const writeAt = (file, offset, data) => file.write(offset, data);
 
-      const returnLength = new Uint8Array(2);
-      new DataView(returnLength.buffer).setUint16(0, end - pos, true);
-      await ctx.writer.write(returnLength.buffer);
-      if (end === pos) return;
-      return ctx.writer.write(fileData.slice(pos, end));
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
+/*
+ *  Handles
+ */
 
-  handleFhSeekMsg: invoke(
-    async ctx => {
-      const fileHandle = (await getBytes(ctx, 1))[0];
-      const offset = new DataView(new Uint8Array(await getBytes(ctx, 4)).buffer).getUint32(0, true);
-      const whence = (await getBytes(ctx, 1))[0];
+const handlesOf = ctx => (ctx.rn.handles ??= []);
 
-      const fh = ctx.rn.handles[fileHandle];
-      let pos = fh?.pos ?? 0;
+// Use the handle asked for if it's free, otherwise the lowest free one.
+// 0xff means there are none.
+const assignHandle = (ctx, wanted, value) => {
+  const handles = handlesOf(ctx);
+  let fh = wanted;
+  if (fh === 0xff || handles[fh]) {
+    fh = handles.findIndex(h => !h);
+    if (fh === -1) fh = handles.length;
+  }
+  if (fh >= 0xff) return 0xff;
+  handles[fh] = value;
+  return fh;
+};
 
-      switch (whence) {
-        case NABU.RN_SEEK_SET: pos = offset; break;
-        case NABU.RN_SEEK_CUR: pos += offset; break;
-        case NABU.RN_SEEK_END: pos = fh.size + offset; break;
-        default: ctx.log(`bad whence: ${whence}`);
-      }
+// The open file for handle `fh`. A handle that isn't open acts like an
+// empty file, so a confused program gets nothing rather than a hung NABU.
+const handleOf = (ctx, fh) => handlesOf(ctx)[fh] ?? {
+  name: `(handle ${fh})`,
+  file: new MemoryFile(),
+  pos: 0,
+  closed: true,
+};
 
-      const message = `Seek {${fileHandle}} ${offset}, ${whence}) -> ${pos}`;
-      ctx.log(message);
-      ctx.progress = { fileName: fh?.fileName, message };
+const closeHandle = async (ctx, fh) => {
+  const handle = handlesOf(ctx)[fh];
+  delete handlesOf(ctx)[fh];
+  await orElse(handle?.file?.close?.());
+  return handle;
+};
 
-      fh.pos = pos;
-      const returnOffset = new Uint8Array(4);
-      new DataView(returnOffset.buffer).setUint32(0, fh.pos, true);
-      return ctx.writer.write(returnOffset.buffer);
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
+/*
+ *  File details: the 83-byte FileDetailsStruct
+ */
 
-  handleFhLineCountMsg: invoke(
-    async ctx => {
-      const fileHandle = (await getBytes(ctx, 1))[0];
+const SIZE_DIRECTORY = -1;
+const SIZE_MISSING = -2;
 
-      const fh = ctx.rn.handles[fileHandle];
-      const fileName = fh.fileName;
+const dateBytes = date => {
+  const d = date ?? new Date();
+  return [...le16(d.getFullYear()), d.getMonth() + 1, d.getDate(),
+    d.getHours(), d.getMinutes(), d.getSeconds()];
+};
 
-      await fetchFile(ctx, fileName);
-      const { fileData } = ctx.rn.files[fileName];
+const details = ({ name = '', size, mtime }) => {
+  const out = new Uint8Array(83);
+  out.set(le32(size), 0);
+  out.set(dateBytes(mtime), 4);
+  out.set(dateBytes(mtime), 11);
+  const encoded = new TextEncoder().encode(name).subarray(0, 64);
+  out[18] = encoded.length;
+  out.set(encoded, 19);
+  return out;
+};
 
-      // Just count the number of newlines
-      const lines = new Uint8Array(fileData).reduce(
-        (count, byte) => count + (byte === 0x0a), 0);
+// Details of a local name: a file, a directory, or missing.
+const namedDetails = async (ctx, name) => {
+  const shown = baseName(name.replace(/\\/g, '/'));
+  if (isWeb(name)) {
+    const file = await orElse(webFile(ctx, name), null);
+    return { name: shown, size: file ? file.size : SIZE_MISSING, mtime: file?.mtime };
+  }
+  const url = localUrl(ctx, name);
+  const storage = storageOf(ctx);
+  if (await orElse(storage.openDirectory(url).then(() => true), false)) {
+    return { name: shown, size: SIZE_DIRECTORY };
+  }
+  const file = await orElse(storage.openFile(url).then(r => r.file), null);
+  return { name: shown, size: file ? file.size : SIZE_MISSING, mtime: file?.mtime };
+};
 
-      const message = `LineCount {${fileHandle}}: ${lines}`;
-      ctx.log(message);
-      ctx.progress = { fileName: fh?.fileName, message };
+// Wildcards: * for any run of characters, ? for any one.
+const wildcard = pattern => new RegExp('^' + [...(pattern || '*')].map(c =>
+  c === '*' ? '.*' : c === '?' ? '.' : c.replace(/[.+^${}()|[\]\\]/g, '\\$&')).join('') + '$', 'i');
 
-      const returnLineCount = new Uint8Array(2);
-      new DataView(returnLineCount.buffer).setUint16(0, lines, true);
-      return ctx.writer.write(returnLineCount.buffer);
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
+/*
+ *  Line-oriented reading
+ */
 
-  handleFhGetLineMsg: invoke(
-    async ctx => {
-      const fileHandle = (await getBytes(ctx, 1))[0];
-      let lineNumber =
-        new DataView(new Uint8Array(await getBytes(ctx, 2)).buffer).getUint16(0, true);
+const lines = data => {
+  const text = [];
+  let begin = 0;
+  for (;;) {
+    const nl = data.indexOf(0x0a, begin);
+    if (nl === -1) break;
+    text.push(data.subarray(begin, nl > begin && data[nl - 1] === 0x0d ? nl - 1 : nl));
+    begin = nl + 1;
+  }
+  if (begin < data.length) text.push(data.subarray(begin));
+  return text;
+};
 
-      const fh = ctx.rn.handles[fileHandle];
-      const fileName = fh.fileName;
+// Handlers by message, which protocol.js makes into states. Each reads the
+// rest of its message and sends the reply, if there is one.
+export const retroNetHandlers = {
+  [NABU.MSG_RN_FILE_OPEN]: async ctx => {
+    const name = await string(ctx);
+    const flag = await u16(ctx);
+    const wanted = await u8(ctx);
+    const readWrite = Boolean(flag & NABU.RN_OPEN_READWRITE);
 
-      await fetchFile(ctx, fileName);
-      const { fileData, size } = ctx.rn.files[fileName];
+    // A missing local file is created only when opened for writing; the
+    // Cloud CP/M loader relies on read-only opens failing.
+    const file = await orElse(openNamed(ctx, name, { create: readWrite }), null);
+    const fh = file ? assignHandle(ctx, wanted, { name, file, pos: 0 }) : 0xff;
+    status(ctx, name, `Open ${baseName(name)} (${readWrite ? 'rw' : 'ro'}) = ${fh}`);
+    return reply(ctx, fh);
+  },
 
-      const message = `GetLine {${fileHandle}} ${lineNumber}`;
-      ctx.log(message);
-      ctx.progress = { fileName: fh?.fileName, message };
+  [NABU.MSG_RN_FH_CLOSE]: async ctx => {
+    const fh = await u8(ctx);
+    const handle = await closeHandle(ctx, fh);
+    status(ctx, handle?.name, `Close ${fh} ${baseName(handle?.name)}`);
+  },
 
-      let byteArray = new Uint8Array(fileData);
-      let begin = 0;
-      // Skip over `lineNumber` newlines
-      while (lineNumber > 0) {
-        const index = byteArray.indexOf(0x0a, begin);
-        if (index == -1) {
-          ctx.log('GetLine ran out of lines');
-          lineNumber = 0;
-        }
-        else {
-          lineNumber--;
-          begin = index + 1;
-        }
-      }
-      // Find the end of the line we want to return
-      let end = byteArray.indexOf(0x0a, begin);
-      // Clamp to end of file
-      if (end == -1) end = size;
-      // If line ended with CR+NL, don't return the CR
-      if (byteArray[end] === 0x0d) end--;
+  [NABU.MSG_RN_FILE_SIZE]: async ctx => {
+    const name = await string(ctx);
+    const file = await orElse(openNamed(ctx, name), null);
+    const size = file ? file.size : -1;
+    status(ctx, name, `Size ${baseName(name)} = ${size}`);
+    return reply(ctx, le32(size));
+  },
 
-      const returnArray = byteArray.subarray(begin, end);
-      const returnLength = new Uint8Array(2);
-      new DataView(returnLength.buffer).setUint16(0, returnArray.length, true);
-      await ctx.writer.write(returnLength.buffer);
-      return ctx.writer.write(returnArray);
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
+  [NABU.MSG_RN_FH_SIZE]: async ctx => {
+    const handle = handleOf(ctx, await u8(ctx));
+    return reply(ctx, le32(handle.closed ? -1 : handle.file.size));
+  },
 
-  handleFhCloseMsg: invoke(
-    async ctx => {
-      const fileHandle = (await getBytes(ctx, 1))[0];
+  [NABU.MSG_RN_FH_READ]: async ctx => {
+    const fh = await u8(ctx);
+    const offset = await u32(ctx);
+    const length = await u16(ctx);
+    const handle = handleOf(ctx, fh);
+    const data = new Uint8Array(await handle.file.read(offset, length));
+    handle.pos = offset + data.length;
+    status(ctx, handle.name, `Read ${baseName(handle.name)} @ ${offset}`,
+      { total: handle.file.size, complete: handle.pos });
+    return reply(ctx, le16(data.length), data);
+  },
 
-      const fh = ctx.rn.handles[fileHandle] ?? {};
+  [NABU.MSG_RN_FH_READSEQ]: async ctx => {
+    const fh = await u8(ctx);
+    const length = await u16(ctx);
+    const handle = handleOf(ctx, fh);
+    const data = new Uint8Array(await handle.file.read(handle.pos, length));
+    handle.pos += data.length;
+    status(ctx, handle.name, `Reading ${baseName(handle.name)}`,
+      { total: handle.file.size, complete: handle.pos });
+    return reply(ctx, le16(data.length), data);
+  },
 
-      const message = `Close {${fileHandle}} ${baseName(fh?.fileName)}`;
-      ctx.log(message);
-      ctx.progress = { fileName: fh?.fileName, message };
+  [NABU.MSG_RN_FH_SEEK]: async ctx => {
+    const fh = await u8(ctx);
+    const offset = await i32(ctx);
+    const whence = await u8(ctx);
+    const handle = handleOf(ctx, fh);
+    const base = { [NABU.RN_SEEK_CUR]: handle.pos, [NABU.RN_SEEK_END]: handle.file.size }[whence] ?? 0;
+    handle.pos = Math.max(0, Math.min(handle.file.size, base + offset));
+    status(ctx, handle.name, `Seek ${baseName(handle.name)} ${offset} (${whence}) = ${handle.pos}`);
+    return reply(ctx, le32(handle.pos));
+  },
 
-      delete ctx.rn.handles[fileHandle];
-    },
-    transition('done', 'idle'),
-    resetOnError
-  ),
+  [NABU.MSG_RN_FH_APPEND]: async ctx => {
+    const handle = handleOf(ctx, await u8(ctx));
+    const data = await bytes(ctx, await u16(ctx));
+    await writeAt(handle.file, handle.file.size, data);
+    status(ctx, handle.name, `Append ${data.length} to ${baseName(handle.name)}`);
+  },
 
+  [NABU.MSG_RN_FH_INSERT]: async ctx => {
+    const handle = handleOf(ctx, await u8(ctx));
+    const offset = await u32(ctx);
+    const data = await bytes(ctx, await u16(ctx));
+    const { file } = handle;
+    const at = Math.min(offset, file.size);
+    const tail = new Uint8Array(await file.read(at, file.size - at));
+    await writeAt(file, at, data);
+    await writeAt(file, at + data.length, tail);
+    status(ctx, handle.name, `Insert ${data.length} into ${baseName(handle.name)} @ ${offset}`);
+  },
+
+  [NABU.MSG_RN_FH_DELETE_RANGE]: async ctx => {
+    const handle = handleOf(ctx, await u8(ctx));
+    const offset = await u32(ctx);
+    const length = await u16(ctx);
+    const { file } = handle;
+    if (offset < file.size) {
+      const end = Math.min(file.size, offset + length);
+      const tail = new Uint8Array(await file.read(end, file.size - end));
+      await writeAt(file, offset, tail);
+      await file.setSize(file.size - (end - offset));
+    }
+    status(ctx, handle.name, `Delete ${length} from ${baseName(handle.name)} @ ${offset}`);
+  },
+
+  [NABU.MSG_RN_FH_REPLACE]: async ctx => {
+    const handle = handleOf(ctx, await u8(ctx));
+    const offset = await u32(ctx);
+    const data = await bytes(ctx, await u16(ctx));
+    await writeAt(handle.file, offset, data);
+    status(ctx, handle.name, `Write ${data.length} to ${baseName(handle.name)} @ ${offset}`);
+  },
+
+  [NABU.MSG_RN_FH_TRUNCATE]: async ctx => {
+    const handle = handleOf(ctx, await u8(ctx));
+    await handle.file.setSize(0);
+    status(ctx, handle.name, `Empty ${baseName(handle.name)}`);
+  },
+
+  [NABU.MSG_RN_FILE_READ]: async ctx => {
+    const name = await string(ctx);
+    const offset = await u32(ctx);
+    const length = await u16(ctx);
+    const file = await orElse(openNamed(ctx, name), null);
+    const data = file ? new Uint8Array(await file.read(offset, length)) : new Uint8Array(0);
+    status(ctx, name, `Read ${baseName(name)} @ ${offset}`);
+    return reply(ctx, le16(data.length), data);
+  },
+
+  [NABU.MSG_RN_FILE_REPLACE]: async ctx => {
+    const name = await string(ctx);
+    const offset = await u32(ctx);
+    const data = await bytes(ctx, await u16(ctx));
+    const file = await orElse(openNamed(ctx, name, { create: true }), null);
+    if (file) {
+      await writeAt(file, offset, data);
+      await orElse(file.close?.());
+    }
+    status(ctx, name, `Write ${data.length} to ${baseName(name)} @ ${offset}`);
+  },
+
+  [NABU.MSG_RN_FILE_DELETE]: async ctx => {
+    const name = await string(ctx);
+    // The IA closes the file if it's open.
+    for (const [fh, handle] of handlesOf(ctx).entries()) {
+      if (handle?.name.toLowerCase() === name.toLowerCase()) await closeHandle(ctx, fh);
+    }
+    if (!isWeb(name)) await orElse(storageOf(ctx).remove(localUrl(ctx, name)));
+    status(ctx, name, `Delete ${baseName(name)}`);
+  },
+
+  [NABU.MSG_RN_FILE_COPY]: async ctx => {
+    const from = await string(ctx);
+    const to = await string(ctx);
+    const replace = Boolean((await u8(ctx)) & NABU.RN_COPY_REPLACE);
+    status(ctx, from, `Copy ${baseName(from)} to ${baseName(to)}`);
+    if (isWeb(to)) return;
+    const source = await orElse(openNamed(ctx, from), null);
+    if (!source) return;
+    const exists = await orElse(openNamed(ctx, to).then(() => true), false);
+    if (exists && !replace) return;
+    const target = await orElse(openNamed(ctx, to, { create: true }), null);
+    if (!target) return;
+    await target.setSize(0);
+    await writeAt(target, 0, await readAll(source));
+    await orElse(target.close?.());
+  },
+
+  [NABU.MSG_RN_FILE_MOVE]: async ctx => {
+    const from = await string(ctx);
+    const to = await string(ctx);
+    const replace = Boolean((await u8(ctx)) & NABU.RN_COPY_REPLACE);
+    status(ctx, from, `Move ${baseName(from)} to ${baseName(to)}`);
+    if (isWeb(from) || isWeb(to)) return;
+    const exists = await orElse(openNamed(ctx, to).then(() => true), false);
+    if (exists && !replace) return;
+    await orElse(storageOf(ctx).rename(localUrl(ctx, from), localUrl(ctx, to)));
+  },
+
+  [NABU.MSG_RN_FILE_LIST]: async ctx => {
+    const path = await string(ctx);
+    const pattern = wildcard(await string(ctx));
+    const flags = await u8(ctx);
+    const entries = isWeb(path) ? [] :
+      await orElse(storageOf(ctx).list(localUrl(ctx, path)), []);
+    ctx.rn.listing = entries.filter(e =>
+      (e.dir ? flags & NABU.RN_LIST_DIRECTORIES : flags & NABU.RN_LIST_FILES) &&
+      e.name !== 'index.json' && pattern.test(e.name));
+    status(ctx, path, `List ${path || '(store)'}: ${ctx.rn.listing.length}`);
+    return reply(ctx, le16(ctx.rn.listing.length));
+  },
+
+  [NABU.MSG_RN_FILE_LIST_ITEM]: async ctx => {
+    const index = await u16(ctx);
+    const entry = ctx.rn.listing?.[index];
+    return reply(ctx, details(entry ?
+      { name: entry.name, size: entry.dir ? SIZE_DIRECTORY : entry.size, mtime: entry.mtime } :
+      { size: SIZE_MISSING }));
+  },
+
+  [NABU.MSG_RN_FILE_DETAILS]: async ctx => {
+    const name = await string(ctx);
+    const info = await namedDetails(ctx, name);
+    status(ctx, name, `Details ${baseName(name)}: ${info.size}`);
+    return reply(ctx, details(info));
+  },
+
+  [NABU.MSG_RN_FH_DETAILS]: async ctx => {
+    const fh = await u8(ctx);
+    const handle = handleOf(ctx, fh);
+    const name = baseName(handle.name.replace(/\\/g, '/'));
+    return reply(ctx, details(handle.closed ? { size: SIZE_MISSING } :
+      { name, size: handle.file.size, mtime: handle.file.mtime }));
+  },
+
+  [NABU.MSG_RN_FH_LINE_COUNT]: async ctx => {
+    const handle = handleOf(ctx, await u8(ctx));
+    const count = lines(await readAll(handle.file)).length;
+    status(ctx, handle.name, `Lines in ${baseName(handle.name)}: ${count}`);
+    return reply(ctx, le16(count));
+  },
+
+  [NABU.MSG_RN_FH_GET_LINE]: async ctx => {
+    const handle = handleOf(ctx, await u8(ctx));
+    const number = await u16(ctx);
+    const line = lines(await readAll(handle.file))[number] ?? new Uint8Array(0);
+    status(ctx, handle.name, `Line ${number} of ${baseName(handle.name)}`);
+    return reply(ctx, le16(line.length), line);
+  },
+
+  // The printer (CP/M's LST:) goes to LST.TXT in the store, like the IA.
+  [NABU.MSG_RN_PRINTER]: async ctx => {
+    const c = await u8(ctx);
+    ctx.rnPrinter ??= openNamed(ctx, 'LST.TXT', { create: true });
+    const file = await orElse(ctx.rnPrinter, null);
+    if (file) await writeAt(file, file.size, Uint8Array.of(c));
+    else delete ctx.rnPrinter;
+  },
+
+  // Nowhere to punch to.
+  [NABU.MSG_RN_PUNCH]: async ctx => {
+    await u8(ctx);
+  },
+
+  // TCP isn't available from a web page, so connections always fail.
+  [NABU.MSG_RN_TCP_OPEN]: async ctx => {
+    const host = await string(ctx);
+    const port = await u16(ctx);
+    await u8(ctx);
+    status(ctx, host, `TCP connection to ${host}:${port} isn't supported`);
+    return reply(ctx, 0xff);
+  },
+
+  [NABU.MSG_RN_TCP_CLOSE]: async ctx => {
+    await u8(ctx);
+  },
+
+  [NABU.MSG_RN_TCP_AVAILABLE]: async ctx => {
+    await u8(ctx);
+    return reply(ctx, le32(-1));
+  },
+
+  [NABU.MSG_RN_TCP_READ]: async ctx => {
+    await u8(ctx);
+    await u16(ctx);
+    return reply(ctx, le32(-1));
+  },
+
+  [NABU.MSG_RN_TCP_WRITE]: async ctx => {
+    await u8(ctx);
+    await bytes(ctx, await u16(ctx));
+    return reply(ctx, le32(-1));
+  },
+
+  // Nor is the IA's TCP server, so nobody's ever connected to it.
+  [NABU.MSG_RN_SERVER_CLIENTS]: ctx => reply(ctx, 0),
+
+  [NABU.MSG_RN_SERVER_AVAILABLE]: ctx => reply(ctx, 0),
+
+  [NABU.MSG_RN_SERVER_READ]: async ctx => {
+    await u8(ctx);
+    return reply(ctx, 0);
+  },
+
+  [NABU.MSG_RN_SERVER_WRITE]: async ctx => {
+    await bytes(ctx, await u8(ctx));
+  },
+
+  // Only the log message is known; other subcommands' replies aren't.
+  [NABU.MSG_RN_IA_CONTROL]: async ctx => {
+    const sub = await u8(ctx);
+    if (sub !== NABU.RN_IA_LOG) throw new Error(`unsupported IA control subcommand ${sub}`);
+    const text = await string(ctx);
+    status(ctx, null, `NABU says: ${text}`);
+  },
 };

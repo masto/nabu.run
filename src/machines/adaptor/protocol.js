@@ -26,7 +26,7 @@ import {
   resetOnError, getBytes, sendBytes, bufferUntil, processBytes,
   expectToReceive
 } from './common';
-import { retroNetStates } from './retronet';
+import { retroNetHandlers } from './retronet';
 import { nhacpStates } from './nhacp';
 import * as NABU from './constants';
 
@@ -66,6 +66,20 @@ const dispatch = (expectMsg, nextState) => transition('done', nextState,
   })
 );
 
+// RetroNET messages each have a handler, which reads the rest of the
+// message and replies. Each becomes a state named after its message.
+const retroNet = (() => {
+  const handlers = retroNetHandlers;
+  const states = {}, codes = {};
+  for (const [code, fn] of Object.entries(handlers)) {
+    const name = Object.keys(NABU).find(k => k.startsWith('MSG_RN_') && NABU[k] === Number(code)) ??
+      `MSG_RN_${hex(Number(code))}`;
+    states[name] = invoke(fn, transition('done', 'idle'), resetOnError);
+    codes[name] = Number(code);
+  }
+  return { states, codes };
+})();
+
 // Use that dispatch function to generate a bunch of 'done' transitions
 // with guards that control which one gets to handle it. Clever, huh?
 const processMessages = invoke(
@@ -80,15 +94,7 @@ const processMessages = invoke(
   dispatch(NABU.MSG_CHANGE_CHANNEL, 'sendChangeChannelAck'),
 
   // RetroNET
-  dispatch(NABU.MSG_RN_FILE_SIZE, 'handleFileSizeMsg'),
-  dispatch(NABU.MSG_RN_FILE_OPEN, 'handleFileOpenMsg'),
-  dispatch(NABU.MSG_RN_FH_DETAILS, 'handleFhDetailsMsg'),
-  dispatch(NABU.MSG_RN_FH_READSEQ, 'handleFhReadseqMsg'),
-  dispatch(NABU.MSG_RN_FH_READ, 'handleFhReadMsg'),
-  dispatch(NABU.MSG_RN_FH_CLOSE, 'handleFhCloseMsg'),
-  dispatch(NABU.MSG_RN_FH_SEEK, 'handleFhSeekMsg'),
-  dispatch(NABU.MSG_RN_FH_LINE_COUNT, 'handleFhLineCountMsg'),
-  dispatch(NABU.MSG_RN_FH_GET_LINE, 'handleFhGetLineMsg'),
+  ...Object.keys(retroNet.states).map(name => dispatch(retroNet.codes[name], name)),
 
   // NHACP
   dispatch(NABU.MSG_NHACP_REQUEST, 'handleNhacpRequest'),
@@ -371,7 +377,7 @@ const machine = createMachine({
    *  Protocol extensions are in separate files for tidiness.
    */
 
-  ...retroNetStates,
+  ...retroNet.states,
   ...nhacpStates
 },
   initialContext => ({

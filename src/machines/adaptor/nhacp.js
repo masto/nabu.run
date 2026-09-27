@@ -17,7 +17,7 @@ import { invoke, transition } from 'robot3';
 import { baseName, bytesToString } from './util';
 
 import { resetOnError, getBytes } from './common';
-import { MemoryStorage, StorageError } from './storage';
+import { StorageError, storageOf } from './storage';
 import * as NABU from './constants';
 
 const ADAPTER_ID = 'nabu.run';
@@ -214,8 +214,6 @@ const checkLength = length => {
     fail(NABU.NHACP_ERROR_EINVAL, `length ${length} exceeds ${NABU.NHACP_MAX_DATA}`);
   }
 };
-
-const storageOf = ctx => ctx.storage ??= new MemoryStorage();
 
 const status = (ctx, name, message) => {
   ctx.log(message);

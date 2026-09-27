@@ -89,18 +89,14 @@ export const MSGSEQ_FINISHED = [MSG_ESCAPE, STATE_DONE];
 
 export const IMAGE_TIME = 0x007fffff;
 
-// RetroNet
+// RetroNET (see docs/cloud-cpm-protocol.md for where to find the spec)
 
-export const MSG_RN_FILE_SIZE = 0xa8;
+// File store
 export const MSG_RN_FILE_OPEN = 0xa3;
-export const MSG_RN_FH_DETAILS = 0xb4;
-export const MSG_RN_FH_READSEQ = 0xb5;
+export const MSG_RN_FH_SIZE = 0xa4;
 export const MSG_RN_FH_READ = 0xa5;
 export const MSG_RN_FH_CLOSE = 0xa7;
-export const MSG_RN_FH_SEEK = 0xb6;
-
-// Not yet implemented
-export const MSG_RN_FH_SIZE = 0xa4;
+export const MSG_RN_FILE_SIZE = 0xa8;
 export const MSG_RN_FH_APPEND = 0xa9;
 export const MSG_RN_FH_INSERT = 0xaa;
 export const MSG_RN_FH_DELETE_RANGE = 0xab;
@@ -112,8 +108,53 @@ export const MSG_RN_FH_TRUNCATE = 0xb0;
 export const MSG_RN_FILE_LIST = 0xb1;
 export const MSG_RN_FILE_LIST_ITEM = 0xb2;
 export const MSG_RN_FILE_DETAILS = 0xb3;
+export const MSG_RN_FH_DETAILS = 0xb4;
+export const MSG_RN_FH_READSEQ = 0xb5;
+export const MSG_RN_FH_SEEK = 0xb6;
 export const MSG_RN_FH_LINE_COUNT = 0xdc;
 export const MSG_RN_FH_GET_LINE = 0xdd;
+export const MSG_RN_FILE_READ = 0xe7;
+export const MSG_RN_FILE_REPLACE = 0xe8;
+
+// TCP client and the IA's TCP server
+export const MSG_RN_TCP_OPEN = 0xd0;
+export const MSG_RN_TCP_CLOSE = 0xd1;
+export const MSG_RN_TCP_AVAILABLE = 0xd2;
+export const MSG_RN_TCP_READ = 0xd3;
+export const MSG_RN_TCP_WRITE = 0xd4;
+export const MSG_RN_SERVER_CLIENTS = 0xd5;
+export const MSG_RN_SERVER_AVAILABLE = 0xd6;
+export const MSG_RN_SERVER_READ = 0xd7;
+export const MSG_RN_SERVER_WRITE = 0xd8;
+
+// Character devices
+export const MSG_RN_PRINTER = 0xda;
+export const MSG_RN_PUNCH = 0xdb;
+
+// IA control (with a subcommand)
+export const MSG_RN_IA_CONTROL = 0xba;
+export const RN_IA_LOG = 0x1f;
+
+// Cloud CP/M drives (with a subcommand)
+export const MSG_RN_CPM = 0xed;
+export const RN_CPM_OPEN = 4;
+export const RN_CPM_CREATE = 5;
+export const RN_CPM_DELETE = 6;
+export const RN_CPM_RENAME = 7;
+export const RN_CPM_SIZE = 8;
+export const RN_CPM_READ = 9;
+export const RN_CPM_WRITE = 10;
+export const RN_CPM_SEARCH_FIRST = 11;
+export const RN_CPM_SEARCH_NEXT = 12;
+export const RN_CPM_SET_SIZE = 13;
+export const RN_CPM_CLOSE = 14;
+export const RN_CPM_READ_BULK = 15;
+export const RN_CPM_RESET = 16;
+
+export const RN_OPEN_READWRITE = 0x01;
+export const RN_COPY_REPLACE = 0x01;
+export const RN_LIST_FILES = 0x01;
+export const RN_LIST_DIRECTORIES = 0x02;
 
 export const RN_SEEK_SET = 1;
 export const RN_SEEK_CUR = 2;
@@ -206,17 +247,6 @@ export const NHACP_ERROR_ENSESS = 19; // Too many sessions
 export const NHACP_ERROR_EAGAIN = 20; // Try again later
 export const NHACP_ERROR_EROFS = 21; // Storage object is write - protected
 
-export const unimplemented = {
-   [MSG_RN_FH_SIZE]: 'MSG_RN_FH_SIZE',
-   [MSG_RN_FH_APPEND]: 'MSG_RN_FH_APPEND',
-   [MSG_RN_FH_INSERT]: 'MSG_RN_FH_INSERT',
-   [MSG_RN_FH_DELETE_RANGE]: 'MSG_RN_FH_DELETE_RANGE',
-   [MSG_RN_FH_REPLACE]: 'MSG_RN_FH_REPLACE',
-   [MSG_RN_FILE_DELETE]: 'MSG_RN_FILE_DELETE',
-   [MSG_RN_FILE_COPY]: 'MSG_RN_FILE_COPY',
-   [MSG_RN_FILE_MOVE]: 'MSG_RN_FILE_MOVE',
-   [MSG_RN_FH_TRUNCATE]: 'MSG_RN_FH_TRUNCATE',
-   [MSG_RN_FILE_LIST]: 'MSG_RN_FILE_LIST',
-   [MSG_RN_FILE_LIST_ITEM]: 'MSG_RN_FILE_LIST_ITEM',
-   [MSG_RN_FILE_DETAILS]: 'MSG_RN_FILE_DETAILS',
-};
+// Messages we know of but don't handle, by name, for telling the user.
+// (None at the moment.)
+export const unimplemented = {};

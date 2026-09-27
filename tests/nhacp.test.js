@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { startAdaptor } from './fake-nabu';
+import { startAdaptor, withIndexes } from './fake-nabu';
 import * as NABU from '../src/machines/adaptor/constants';
 
 const channel = { baseUrl: 'https://example.test/', imageDir: 'cpm', imageName: null };
@@ -255,27 +255,6 @@ describe('everything else', () => {
     expectError(await request(nabu, 0, NABU.NHACP_REQUEST_STORAGE_GET_BLOCK, 0, u16(1)), NABU.NHACP_ERROR_EINVAL);
   });
 });
-
-// Add an index.json to each directory, as the catalog's make-index.py does.
-const withIndexes = files => {
-  const dirs = new Map([['', new Map()]]);
-  for (const [path, data] of Object.entries(files)) {
-    const parts = path.split('/');
-    parts.forEach((name, i) => {
-      const dir = parts.slice(0, i).join('/');
-      if (!dirs.has(dir)) dirs.set(dir, new Map());
-      dirs.get(dir).set(name, i < parts.length - 1 ?
-        { name, dir: true } :
-        { name, size: data.length, mtime: '2023-02-25T20:24:32Z' });
-    });
-  }
-  const out = { ...files };
-  for (const [dir, entries] of dirs) {
-    out[dir ? `${dir}/index.json` : 'index.json'] =
-      new TextEncoder().encode(JSON.stringify({ entries: [...entries.values()] }));
-  }
-  return out;
-};
 
 describe('directories', () => {
   const nfs = { baseUrl: 'https://example.test/', imageDir: 'nfs', imageName: null };

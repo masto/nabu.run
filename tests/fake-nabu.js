@@ -80,3 +80,24 @@ export const startAdaptor = (files, channel = pakChannel, context = {}) => {
   });
   return nabu;
 };
+
+// Add an index.json to each directory, as the catalog's make-index.py does.
+export const withIndexes = files => {
+  const dirs = new Map([['', new Map()]]);
+  for (const [path, data] of Object.entries(files)) {
+    const parts = path.split('/');
+    parts.forEach((name, i) => {
+      const dir = parts.slice(0, i).join('/');
+      if (!dirs.has(dir)) dirs.set(dir, new Map());
+      dirs.get(dir).set(name, i < parts.length - 1 ?
+        { name, dir: true } :
+        { name, size: data.length, mtime: '2023-02-25T20:24:32Z' });
+    });
+  }
+  const out = { ...files };
+  for (const [dir, entries] of dirs) {
+    out[dir ? `${dir}/index.json` : 'index.json'] =
+      new TextEncoder().encode(JSON.stringify({ entries: [...entries.values()] }));
+  }
+  return out;
+};

@@ -33,6 +33,10 @@
 // MemoryStorage is here; FolderStorage (folder-storage.js) keeps files in a
 // local folder, and StorageManager (storage-manager.js) picks between them.
 
+// The storage for an adaptor connection: the one it was given (the app
+// passes a StorageManager), or else memory.
+export const storageOf = ctx => ctx.storage ??= new MemoryStorage();
+
 export class StorageError extends Error {
   constructor(code, message) {
     super(message ?? code);
