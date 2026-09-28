@@ -334,6 +334,18 @@ describe('directories', () => {
     expect(await readAll('a0/readme.txt')).toBe('read me');
   });
 
+  it('dates files from the index when the server sends no Last-Modified', async () => {
+    await open(nabu, 'A0/README.TXT', 0, 4);
+    const info = await request(nabu, 0, NABU.NHACP_REQUEST_FILE_GET_INFO, 4);
+    expect(info.type).toBe(NABU.NHACP_RESPONSE_FILE_INFO);
+    // withIndexes dates everything 2023-02-25T20:24:32Z; NHACP uses local time.
+    const d = new Date('2023-02-25T20:24:32Z');
+    const pad = (v, n) => String(v).padStart(n, '0');
+    const expected = pad(d.getFullYear(), 4) + pad(d.getMonth() + 1, 2) + pad(d.getDate(), 2) +
+      pad(d.getHours(), 2) + pad(d.getMinutes(), 2) + pad(d.getSeconds(), 2);
+    expect(new TextDecoder().decode(Uint8Array.from(info.bytes.slice(0, 14)))).toBe(expected);
+  });
+
   it('tells files and directories apart', async () => {
     expectError(await open(nabu, 'A0/asm.com', O_DIR), NABU.NHACP_ERROR_ENOTDIR);
     expectError(await open(nabu, 'A0'), NABU.NHACP_ERROR_EISDIR);

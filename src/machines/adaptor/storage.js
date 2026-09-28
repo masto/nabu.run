@@ -283,7 +283,7 @@ export class MemoryStorage {
     const key = keyOf(node.url);
     let change = this.#changes.get(key);
     if (!change?.file) {
-      const pending = fetchFile(change?.source ?? node.url);
+      const pending = fetchFile(change?.source ?? node.url, node.mtime);
       change = { type: 'file', url: node.url, file: pending };
       this.#changes.set(key, change);
       // Don't remember failures; the file may appear or be created later.
@@ -336,7 +336,9 @@ const fetchIndex = async url => {
   }]));
 };
 
-const fetchFile = async url => {
+// A file's date comes from its index entry (`known`) when there is one,
+// since not every server sends Last-Modified.
+const fetchFile = async (url, known) => {
   let response;
   try {
     response = await fetch(url);
@@ -352,6 +354,6 @@ const fetchFile = async url => {
   }
 
   const lastModified = response.headers?.get?.('Last-Modified');
-  const mtime = lastModified ? new Date(lastModified) : new Date();
+  const mtime = known ?? (lastModified ? new Date(lastModified) : new Date());
   return new MemoryFile(new Uint8Array(await response.arrayBuffer()), mtime);
 };
