@@ -1,0 +1,35 @@
+# Deploy nabu.run to Cloudflare whenever the release branch is pushed:
+#
+#   git push origin main:release
+#
+# This runs the same tools/release.sh as a manual release (clean build, lint,
+# tests, localhost check, deploy). It needs a CLOUDFLARE_API_TOKEN secret;
+# see "Releasing" in the README.
+name: Release
+
+on:
+  push:
+    branches: [release]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer push waits rather than racing an older one.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build, check and deploy
+        run: tools/release.sh --go
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

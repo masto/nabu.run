@@ -114,6 +114,19 @@ default; set `NABU_ALL_PAKS=1` to replay every pak in the directory.
 
 ## Releasing
 
+Pushing to the `release` branch deploys automatically: the Release workflow
+(`.github/workflows/release.yml`) runs `tools/release.sh --go` on GitHub.
+
+```bash
+git push origin main:release
+```
+
+It needs a `CLOUDFLARE_API_TOKEN` repository secret: a Cloudflare API token
+made from the "Edit Cloudflare Workers" template, limited to this account and
+the nabu.run zone.
+
+To release by hand instead:
+
 ```bash
 tools/release.sh        # build, and upload a preview version
 tools/release.sh --go   # build, and deploy

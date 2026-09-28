@@ -3,6 +3,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "nabu-run",
+  // Not a secret. Set so deploys with an API token (the release workflow)
+  // don't have to work out which account to use.
+  "account_id": "31f2f41a408a135046ae7b2299b781f9",
   "compatibility_date": "2026-09-01",
   "assets": {
     "directory": "./build",
