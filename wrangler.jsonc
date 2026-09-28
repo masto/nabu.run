@@ -1,0 +1,21 @@
+// nabu.run on Cloudflare Workers: the built app as static assets, with no
+// Worker script. tools/release.sh deploys it.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nabu-run",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./build",
+    // Paths that aren't files (like /faq) get index.html, so the app's
+    // routes work when loaded directly.
+    "not_found_handling": "single-page-application"
+  },
+  // www.nabu.run is redirected to nabu.run by a Redirect Rule in the
+  // dashboard, before it reaches the Worker.
+  "routes": [
+    { "pattern": "nabu.run", "custom_domain": true },
+    { "pattern": "www.nabu.run", "custom_domain": true }
+  ],
+  "workers_dev": true,
+  "preview_urls": true
+}

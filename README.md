@@ -115,13 +115,16 @@ default; set `NABU_ALL_PAKS=1` to replay every pak in the directory.
 ## Releasing
 
 ```bash
-export NABU_RUN_DEPLOY_TARGET=user@host:nabu.run/   # an rsync destination
-tools/release.sh        # build, and show what deploying would change
+tools/release.sh        # build, and upload a preview version
 tools/release.sh --go   # build, and deploy
 ```
 
-Without `NABU_RUN_DEPLOY_TARGET`, the release is built and checked but not
-deployed.
+nabu.run is hosted as a Cloudflare Worker with static assets and no script
+(`wrangler.jsonc`), so wrangler has to be logged in (`npx wrangler login`)
+or `CLOUDFLARE_API_TOKEN` set. Without `--go`, the release is uploaded as a
+version that isn't live, and wrangler prints a preview URL for it. Each
+deploy is the whole site. `npx wrangler rollback` goes back to an earlier
+version.
 
 The release is built from a fresh export of the last commit. Bump the version
 with `npm version <x.y.z> --no-git-tag-version`, which updates both

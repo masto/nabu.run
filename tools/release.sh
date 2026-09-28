@@ -7,11 +7,11 @@
 # which also fails if it doesn't match package.json), and lint and tests
 # have to pass.
 #
-# Where it goes is up to you, as an rsync destination in
-# NABU_RUN_DEPLOY_TARGET (e.g. user@host:nabu.run/). Without it, the
-# release is just built and checked.
+# It goes to Cloudflare Workers as static assets (see wrangler.jsonc), which
+# needs wrangler to be logged in (npx wrangler login) or
+# CLOUDFLARE_API_TOKEN set. Every deploy is the whole site.
 #
-# usage: tools/release.sh         build, and show what deploying would change
+# usage: tools/release.sh         build, and upload a preview version
 #        tools/release.sh --go    build, and deploy
 set -e
 
@@ -42,19 +42,12 @@ if grep -rIl 'localhost' build >&2; then
   exit 1
 fi
 
-if [ -z "$NABU_RUN_DEPLOY_TARGET" ]; then
-  echo "built and checked $VERSION; set NABU_RUN_DEPLOY_TARGET to deploy it" >&2
-  exit 0
-fi
-
-DRY=-n
-[ "$1" = "--go" ] && DRY=
-
-# --checksum: a fresh build has new file times, so compare contents instead.
-# --delete: the build is the whole site, and this clears out old bundles.
-rsync -rlpiz --checksum --delete $DRY build/ "$NABU_RUN_DEPLOY_TARGET"
-if [ -n "$DRY" ]; then
-  echo "(dry run; re-run with --go to deploy $VERSION)" >&2
+MESSAGE="$VERSION ($COMMIT)"
+if [ "$1" = "--go" ]; then
+  npx wrangler deploy --message "$MESSAGE"
+  echo "deployed nabu.run $MESSAGE" >&2
 else
-  echo "deployed nabu.run $VERSION ($COMMIT) to $NABU_RUN_DEPLOY_TARGET" >&2
+  # Uploaded but not live; wrangler prints the version's preview URL.
+  npx wrangler versions upload --message "$MESSAGE"
+  echo "(preview only; re-run with --go to deploy $VERSION)" >&2
 fi
